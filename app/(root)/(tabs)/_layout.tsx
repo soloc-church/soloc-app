@@ -1,14 +1,73 @@
-import { Stack } from "expo-router"
+import { Tabs } from "expo-router";
+import { View, Image, ImageSourcePropType } from "react-native";
+import { icons } from "@/constants";
 
-const TabLayout = () => {
-    return (
-        <Stack>
-            <Stack.Screen name="home" options={{headerShown: false}} />
-            <Stack.Screen name="message" options={{headerShown: false}} />
-            <Stack.Screen name="news" options={{headerShown: false}} />
-            <Stack.Screen name="profile" options={{headerShown: false}} />
-        </Stack>
-    )
-}
 
-export default TabLayout;
+const TabIcon = ({ source, focused }: { source: ImageSourcePropType; focused: boolean }) => (
+  <View
+    className={`items-center justify-center rounded-full w-12 h-12 ${
+      focused ? "bg-primary-600 shadow-lg" : "bg-transparent"
+    }`}
+  >
+    <Image
+      source={source}
+      resizeMode="contain"
+      className="w-7 h-7"
+      tintColor={focused ? "white" : "#9ca3af"}
+    />
+  </View>
+);
+
+const Layout = () => (
+  <Tabs
+    initialRouteName="home"
+    screenOptions={{
+      headerShown: false,
+      tabBarShowLabel: false,
+      tabBarStyle: {
+        borderTopWidth: 0,
+        elevation: 0,
+        backgroundColor: "#ffffffee",
+        height: 70,
+        position: "absolute",
+        bottom: 12,
+        left: 16,
+        right: 16,
+        borderRadius: 20,
+        paddingBottom: 10,
+      },
+    }}
+  >
+    <Tabs.Screen
+      name="home"
+      options={{
+        title: "Home",
+        tabBarIcon: ({ focused }) => <TabIcon focused={focused} source={icons.home} />,
+      }}
+    />
+    <Tabs.Screen
+      name="message"
+      options={{
+        title: "Messages",
+        tabBarIcon: ({ focused }) => <TabIcon focused={focused} source={icons.chat} />,
+      }}
+    />
+    <Tabs.Screen
+      name="news"
+      options={{
+        title: "News",
+        tabBarIcon: ({ focused }) => <TabIcon focused={focused} source={icons.chat} />,
+      }}
+    />
+    <Tabs.Screen
+      name="profile"
+      options={{
+        title: "Profile",
+        tabBarIcon: ({ focused }) => <TabIcon focused={focused} source={icons.profile} />,
+      }}
+    />
+
+  </Tabs>
+);
+
+export default Layout;

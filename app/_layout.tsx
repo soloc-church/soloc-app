@@ -3,6 +3,7 @@ import * as SplashScreen from "expo-splash-screen";
 import "../global.css";
 import { useEffect } from 'react';
 import {useFonts} from 'expo-font';
+import { AuthProvider } from '@/contexts/AuthContext';
 
 export default function RootLayout() {
     const [loaded] = useFonts({
@@ -20,18 +21,19 @@ export default function RootLayout() {
             SplashScreen.hideAsync();
         }
     }, [loaded]);
+    
     if (!loaded) {
         return null;
     }
+    
     return (
-        <Stack>
-            <Stack.Screen name="(root)" options={{ headerShown: false}} />
-            <Stack.Screen name="(auth)" options={{ headerShown: false}} />
-            <Stack.Screen name="index" options={{headerShown: false}} />
-            <Stack.Screen name="+not-found" options={{headerShown: false}}/>
-        </Stack>
+        <AuthProvider>
+            <Stack>
+                <Stack.Screen name="(root)" options={{ headerShown: false}} />
+                <Stack.Screen name="(auth)" options={{ headerShown: false}} />
+                <Stack.Screen name="index" options={{headerShown: false}} />
+                <Stack.Screen name="+not-found" options={{headerShown: false}}/>
+            </Stack>
+        </AuthProvider>
     )
-  
 }
-
-
