@@ -54,10 +54,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "contextual_roles_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "v_profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "contextual_roles_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contextual_roles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -99,10 +113,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "family_relationships_user_id_1_fkey"
+            columns: ["user_id_1"]
+            isOneToOne: false
+            referencedRelation: "v_profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "family_relationships_user_id_2_fkey"
             columns: ["user_id_2"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "family_relationships_user_id_2_fkey"
+            columns: ["user_id_2"]
+            isOneToOne: false
+            referencedRelation: "v_profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -150,6 +178,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_chats_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "v_profiles"
             referencedColumns: ["id"]
           },
           {
@@ -206,10 +241,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "group_memberships_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "v_profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "group_memberships_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_memberships_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -294,10 +343,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "join_requests_processed_by_fkey"
+            columns: ["processed_by"]
+            isOneToOne: false
+            referencedRelation: "v_profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "join_requests_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "join_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -338,6 +401,13 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "ministries_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "v_profiles"
+            referencedColumns: ["id"]
+          },
         ]
       }
       profiles: {
@@ -345,6 +415,7 @@ export type Database = {
           address: string | null
           birthday: string | null
           created_at: string
+          email: string | null
           full_name: string | null
           global_role: Database["public"]["Enums"]["global_role"]
           id: string
@@ -361,6 +432,7 @@ export type Database = {
           address?: string | null
           birthday?: string | null
           created_at?: string
+          email?: string | null
           full_name?: string | null
           global_role?: Database["public"]["Enums"]["global_role"]
           id: string
@@ -377,6 +449,7 @@ export type Database = {
           address?: string | null
           birthday?: string | null
           created_at?: string
+          email?: string | null
           full_name?: string | null
           global_role?: Database["public"]["Enums"]["global_role"]
           id?: string
@@ -434,10 +507,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "role_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "v_profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "role_events_target_id_fkey"
             columns: ["target_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "role_events_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "v_profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -482,6 +569,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "teams_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "v_profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "teams_ministry_id_fkey"
             columns: ["ministry_id"]
             isOneToOne: false
@@ -492,19 +586,61 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      v_profiles: {
+        Row: {
+          address: string | null
+          birthday: string | null
+          email: string | null
+          full_name: string | null
+          global_role: Database["public"]["Enums"]["global_role"] | null
+          id: string | null
+          is_active: boolean | null
+          joined_date: string | null
+          phone: string | null
+          profile_image_url: string | null
+        }
+        Insert: {
+          address?: never
+          birthday?: never
+          email?: never
+          full_name?: string | null
+          global_role?: never
+          id?: string | null
+          is_active?: boolean | null
+          joined_date?: string | null
+          phone?: never
+          profile_image_url?: string | null
+        }
+        Update: {
+          address?: never
+          birthday?: never
+          email?: never
+          full_name?: string | null
+          global_role?: never
+          id?: string | null
+          is_active?: boolean | null
+          joined_date?: string | null
+          phone?: never
+          profile_image_url?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
-      get_my_global_role: {
+      current_global_role: {
         Args: Record<PropertyKey, never>
         Returns: Database["public"]["Enums"]["global_role"]
       }
-      has_elevated_role: {
-        Args: { p_user_id: string }
+      is_elevated: {
+        Args: { p_uid?: string }
         Returns: boolean
       }
       is_group_leader: {
-        Args: { p_group_id: string; p_user_id: string }
+        Args: { p_group_id: string; p_user_id?: string }
+        Returns: boolean
+      }
+      role_in: {
+        Args: Record<PropertyKey, never>
         Returns: boolean
       }
     }

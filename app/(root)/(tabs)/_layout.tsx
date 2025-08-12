@@ -56,7 +56,7 @@ const Layout = () => (
       name="news"
       options={{
         title: "News",
-        tabBarIcon: ({ focused }) => <TabIcon focused={focused} source={icons.chat} />,
+        tabBarIcon: ({ focused }) => <TabIcon focused={focused} source={icons.newspaper} />,
       }}
     />
     <Tabs.Screen
