@@ -24,6 +24,14 @@ import selectedMarker from "@/assets/icons/selected-marker.png";
 import star from "@/assets/icons/star.png";
 import target from "@/assets/icons/target.png";
 import to from "@/assets/icons/to.png";
+import notification from "@/assets/icons/bell-notification-social-media.png";
+import calendar from "@/assets/icons/calendar-clock.png";
+import copyright from "@/assets/icons/copyright.png";
+import creditCard from "@/assets/icons/credit-card.png";
+import pledge from "@/assets/icons/heart-partner-handshake.png";
+import info from "@/assets/icons/info.png";
+import memo from "@/assets/icons/memo.png";
+import history from "@/assets/icons/time-past.png";
 import check from "@/assets/images/check.png";
 import getStarted from "@/assets/images/get-started.png";
 import message from "@/assets/images/message.png";
@@ -45,8 +53,17 @@ export const images = {
 };
 
 export const icons = {
+    notification,
+    calendar,
+    copyright,
+    creditCard,
+    pledge,
+    info,
+    memo,
+    history,
     arrowDown,
     arrowUp,
+    arrowRight: backArrow,
     backArrow,
     chat,
     newspaper,

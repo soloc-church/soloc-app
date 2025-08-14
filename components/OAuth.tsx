@@ -54,6 +54,32 @@ const OAuth = () => {
             refresh_token,
         });
         if (error) throw error;
+        
+        // Ensure profile exists for OAuth users
+        if (data.session?.user) {
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('id', data.session.user.id)
+                .single();
+            
+            if (!profile) {
+                // Create profile for OAuth user
+                await supabase
+                    .from('profiles')
+                    .insert({
+                        id: data.session.user.id,
+                        email: data.session.user.email,
+                        full_name: data.session.user.user_metadata?.full_name || 
+                                  data.session.user.user_metadata?.name ||
+                                  data.session.user.email?.split('@')[0],
+                        global_role: 'guest',
+                        is_active: true,
+                        joined_date: new Date().toISOString().split('T')[0]
+                    });
+            }
+        }
+        
         return data.session;
     };
 

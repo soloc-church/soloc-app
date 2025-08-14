@@ -70,7 +70,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [])
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -80,6 +80,36 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         emailRedirectTo: 'solocapp://auth/callback',
       },
     })
+
+    // if signup successful ensure profile exists
+    if(!error && data.user && !data.session) {
+      // user needs to confirm email
+      return {error};
+    }
+
+    if(!error && data.user && data.session) {
+      //check if profile was created by trigger
+      const {data: profile} = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', data.user.id)
+        .single();
+
+      if(!profile) {
+        // manually create profile if trigger failed
+        await supabase
+          .from('profiles')
+          .insert({
+            id: data.user.id,
+            full_name: fullName,
+            email: email,
+            global_role: 'guest',
+            is_active: true,
+            joined_date: new Date().toISOString().split('T')[0]
+          });
+      }
+    }
+
     return { error }
   }
 

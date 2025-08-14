@@ -20,7 +20,7 @@ const TabIcon = ({ source, focused }: { source: ImageSourcePropType; focused: bo
 
 const Layout = () => (
   <Tabs
-    initialRouteName="home"
+    initialRouteName="home/index"
     screenOptions={{
       headerShown: false,
       tabBarShowLabel: false,
@@ -39,21 +39,21 @@ const Layout = () => (
     }}
   >
     <Tabs.Screen
-      name="home"
+      name="home/index"
       options={{
         title: "Home",
         tabBarIcon: ({ focused }) => <TabIcon focused={focused} source={icons.home} />,
       }}
     />
     <Tabs.Screen
-      name="message"
+      name="message/index"
       options={{
         title: "Messages",
         tabBarIcon: ({ focused }) => <TabIcon focused={focused} source={icons.chat} />,
       }}
     />
     <Tabs.Screen
-      name="news"
+      name="news/index"
       options={{
         title: "News",
         tabBarIcon: ({ focused }) => <TabIcon focused={focused} source={icons.newspaper} />,

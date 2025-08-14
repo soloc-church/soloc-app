@@ -18,6 +18,7 @@
     "lib/**/*",
     "contexts/**/*",
     "declarations.d.ts",
+    "hooks/**/*",
     "nativewind-env.d.ts"
   ]
 }
