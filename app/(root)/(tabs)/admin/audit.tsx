@@ -6,6 +6,7 @@ import { icons } from "@/constants";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuthz } from "@/hooks/useAuthz";
+import { can } from "@/lib/rbac/permissions";
 
 interface RoleEvent {
   id: string;
@@ -23,51 +24,62 @@ interface RoleEvent {
 }
 
 const AuditLogs = () => {
-  const { isElder } = usePermissions();
+  const { authz, loading: authzLoading } = useAuthz();
   const [events, setEvents] = useState<RoleEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'global' | 'contextual'>('all');
 
   useEffect(() => {
-    if (!isElder) {
-      router.back();
-      return;
+    if (!authzLoading) {
+      if (!can.openAdminPanel(authz)) {
+        router.back();
+        return;
+      }
+      loadAuditLogs();
     }
-    loadAuditLogs();
-  }, [filter]);
+  }, [filter, authzLoading, authz]);
 
   const loadAuditLogs = async (isRefreshing = false) => {
     if (isRefreshing) setRefreshing(true);
     else setLoading(true);
 
     try {
-      let query = supabase
-        .from('role_events')
-        .select(`
-          *,
-          actor:profiles!role_events_actor_id_fkey(full_name),
-          target:profiles!role_events_target_id_fkey(full_name)
-        `)
-        .order('timestamp', { ascending: false })
-        .limit(100);
-
-      // Apply filters
-      if (filter === 'global') {
-        query = query.in('role_assigned', ['admin', 'pastor', 'elder', 'member', 'guest']);
-      } else if (filter === 'contextual') {
-        query = query.not('scope_type', 'is', null);
-      }
-
-      const { data, error } = await query;
+      // Use list_role_events RPC instead of direct table access
+      const { data, error } = await supabase.rpc('list_role_events', { 
+        p_limit: 100 
+      });
 
       if (error) throw error;
 
+      // Filter based on type
+      let filteredData = data || [];
+      if (filter === 'global') {
+        filteredData = filteredData.filter(e => 
+          ['admin', 'pastor', 'elder', 'member', 'guest'].includes(e.role_assigned)
+        );
+      } else if (filter === 'contextual') {
+        filteredData = filteredData.filter(e => e.scope_type !== null);
+      }
+
       // Load scope names for contextual roles
-      const eventsWithScopes = await Promise.all((data || []).map(async (event) => {
+      const eventsWithDetails = await Promise.all(filteredData.map(async (event) => {
+        // Get actor and target names
+        const [actorRes, targetRes] = await Promise.all([
+          event.actor_id ? supabase
+            .from('v_profiles')
+            .select('full_name')
+            .eq('id', event.actor_id)
+            .single() : null,
+          supabase
+            .from('v_profiles')
+            .select('full_name')
+            .eq('id', event.target_id)
+            .single()
+        ]);
+
+        let scopeName = '';
         if (event.scope_type && event.scope_id) {
-          let scopeName = '';
-          
           if (event.scope_type === 'ministry') {
             const { data: ministry } = await supabase
               .from('ministries')
@@ -90,13 +102,17 @@ const AuditLogs = () => {
               .single();
             scopeName = group?.name || 'Unknown Group';
           }
-
-          return { ...event, scope: { name: scopeName } };
         }
-        return event;
+
+        return { 
+          ...event, 
+          actor: actorRes?.data ? { full_name: actorRes.data.full_name || 'Unknown' } : null,
+          target: targetRes?.data ? { full_name: targetRes.data.full_name || 'Unknown' } : null,
+          scope: scopeName ? { name: scopeName } : null 
+        };
       }));
 
-      setEvents(eventsWithScopes);
+      setEvents(eventsWithDetails);
     } catch (error) {
       console.error('Error loading audit logs:', error);
     } finally {
@@ -156,7 +172,6 @@ const AuditLogs = () => {
   const EventCard = ({ event }: { event: RoleEvent }) => {
     const actionIcon = getActionIcon(event.action);
     const roleColor = getRoleColor(event.role_assigned);
-    const isGlobalRole = ['admin', 'pastor', 'elder', 'member', 'guest'].includes(event.role_assigned);
 
     return (
       <View className="bg-white rounded-xl p-4 mb-3 shadow-sm border border-gray-100">
@@ -224,6 +239,14 @@ const AuditLogs = () => {
     { key: 'global', label: 'Global Roles' },
     { key: 'contextual', label: 'Contextual Roles' }
   ];
+
+  if (authzLoading) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50 justify-center items-center">
+        <ActivityIndicator size="large" color="#A89BB5" />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">

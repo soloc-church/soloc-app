@@ -6,6 +6,7 @@ import { icons } from "@/constants";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuthz } from "@/hooks/useAuthz";
+import { can } from "@/lib/rbac/permissions";
 
 interface Ministry {
   id: string;
@@ -25,7 +26,7 @@ interface Team {
 }
 
 const MinistryManagement = () => {
-  const { isElder } = usePermissions();
+  const { authz, loading: authzLoading } = useAuthz();
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,13 +38,15 @@ const MinistryManagement = () => {
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    if (!isElder) {
+    if (!authzLoading && !can.openAdminPanel(authz)) {
       Alert.alert('Access Denied', 'You need elder privileges or higher to manage ministries');
       router.back();
       return;
     }
-    loadData();
-  }, []);
+    if (!authzLoading) {
+      loadData();
+    }
+  }, [authzLoading, authz]);
 
   const loadData = async () => {
     try {
@@ -229,6 +232,14 @@ const MinistryManagement = () => {
       </View>
     </View>
   );
+
+  if (authzLoading) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50 justify-center items-center">
+        <ActivityIndicator size="large" color="#A89BB5" />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">

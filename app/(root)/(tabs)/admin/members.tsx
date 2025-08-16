@@ -76,11 +76,6 @@ const MemberCard = ({
             )}
           </View>
           <Text className="text-sm text-gray-500 mt-0.5">{member.email}</Text>
-          {member.contextual_roles && member.contextual_roles.length > 0 && (
-            <Text className="text-xs text-gray-400 mt-1">
-              {member.contextual_roles.length} contextual role{member.contextual_roles.length !== 1 ? 's' : ''}
-            </Text>
-          )}
         </View>
 
         <RoleBadge role={member.global_role} />
@@ -106,18 +101,31 @@ const MemberManagement = () => {
 
   const loadMembers = async () => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select(`
-          *,
-          contextual_roles!contextual_roles_user_id_fkey(*)
-        `)
-        .order('full_name');
+      // Use admin_list_members RPC for elders+
+      const { data, error } = await supabase.rpc('admin_list_members', { 
+        q: null, 
+        p_limit: 200 
+      });
 
       if (error) throw error;
 
-      setMembers(data || []);
-      setFilteredMembers(data || []);
+      // Load contextual roles count for each member
+      const membersWithDetails = await Promise.all((data || []).map(async (member: any) => {
+        const { count } = await supabase
+          .from('contextual_roles')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', member.id)
+          .eq('is_active', true);
+
+        return {
+          ...member,
+          contextual_roles: [],
+          contextual_roles_count: count || 0
+        };
+      }));
+
+      setMembers(membersWithDetails);
+      setFilteredMembers(membersWithDetails);
     } catch (error) {
       console.error('Error loading members:', error);
       Alert.alert('Error', 'Failed to load members');
