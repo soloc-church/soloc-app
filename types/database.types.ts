@@ -7,22 +7,57 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "12.2.3 (519615d)"
   }
   public: {
     Tables: {
+      capabilities: {
+        Row: {
+          cap: string
+        }
+        Insert: {
+          cap: string
+        }
+        Update: {
+          cap?: string
+        }
+        Relationships: []
+      }
+      contextual_role_capabilities: {
+        Row: {
+          cap: string
+          role: Database["public"]["Enums"]["contextual_role_type"]
+        }
+        Insert: {
+          cap: string
+          role: Database["public"]["Enums"]["contextual_role_type"]
+        }
+        Update: {
+          cap?: string
+          role?: Database["public"]["Enums"]["contextual_role_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contextual_role_capabilities_cap_fkey"
+            columns: ["cap"]
+            isOneToOne: false
+            referencedRelation: "capabilities"
+            referencedColumns: ["cap"]
+          },
+        ]
+      }
       contextual_roles: {
         Row: {
           assigned_at: string
           assigned_by: string | null
           id: string
           is_active: boolean | null
-          role_type: string
+          role_type: Database["public"]["Enums"]["contextual_role_type"]
           scope_id: string
-          scope_type: string
+          scope_type: Database["public"]["Enums"]["scope_type"]
           user_id: string
         }
         Insert: {
@@ -30,9 +65,9 @@ export type Database = {
           assigned_by?: string | null
           id?: string
           is_active?: boolean | null
-          role_type: string
+          role_type: Database["public"]["Enums"]["contextual_role_type"]
           scope_id: string
-          scope_type: string
+          scope_type: Database["public"]["Enums"]["scope_type"]
           user_id: string
         }
         Update: {
@@ -40,9 +75,9 @@ export type Database = {
           assigned_by?: string | null
           id?: string
           is_active?: boolean | null
-          role_type?: string
+          role_type?: Database["public"]["Enums"]["contextual_role_type"]
           scope_id?: string
-          scope_type?: string
+          scope_type?: Database["public"]["Enums"]["scope_type"]
           user_id?: string
         }
         Relationships: [
@@ -132,6 +167,29 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_profiles"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      global_role_capabilities: {
+        Row: {
+          cap: string
+          role: Database["public"]["Enums"]["global_role"]
+        }
+        Insert: {
+          cap: string
+          role: Database["public"]["Enums"]["global_role"]
+        }
+        Update: {
+          cap?: string
+          role?: Database["public"]["Enums"]["global_role"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "global_role_capabilities_cap_fkey"
+            columns: ["cap"]
+            isOneToOne: false
+            referencedRelation: "capabilities"
+            referencedColumns: ["cap"]
           },
         ]
       }
@@ -472,7 +530,7 @@ export type Database = {
           reason: string | null
           role_assigned: string
           scope_id: string | null
-          scope_type: string | null
+          scope_type: Database["public"]["Enums"]["scope_type"] | null
           target_id: string
           timestamp: string
         }
@@ -483,7 +541,7 @@ export type Database = {
           reason?: string | null
           role_assigned: string
           scope_id?: string | null
-          scope_type?: string | null
+          scope_type?: Database["public"]["Enums"]["scope_type"] | null
           target_id: string
           timestamp?: string
         }
@@ -494,7 +552,7 @@ export type Database = {
           reason?: string | null
           role_assigned?: string
           scope_id?: string | null
-          scope_type?: string | null
+          scope_type?: Database["public"]["Enums"]["scope_type"] | null
           target_id?: string
           timestamp?: string
         }
@@ -586,6 +644,51 @@ export type Database = {
       }
     }
     Views: {
+      role_events_view: {
+        Row: {
+          action: Database["public"]["Enums"]["role_action"] | null
+          actor_id: string | null
+          actor_name: string | null
+          id: string | null
+          reason: string | null
+          role_assigned: string | null
+          scope_id: string | null
+          scope_type: Database["public"]["Enums"]["scope_type"] | null
+          target_id: string | null
+          target_name: string | null
+          timestamp: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "role_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "role_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "v_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "role_events_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "role_events_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "v_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v_profiles: {
         Row: {
           address: string | null
@@ -631,6 +734,37 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: Database["public"]["Enums"]["global_role"]
       }
+      get_authz_for_current_user: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      grant_contextual_role: {
+        Args: {
+          reason?: string
+          role_type: Database["public"]["Enums"]["contextual_role_type"]
+          scope_id: string
+          scope_type: Database["public"]["Enums"]["scope_type"]
+          target_user_id: string
+        }
+        Returns: {
+          assigned_at: string
+          assigned_by: string | null
+          id: string
+          is_active: boolean | null
+          role_type: Database["public"]["Enums"]["contextual_role_type"]
+          scope_id: string
+          scope_type: Database["public"]["Enums"]["scope_type"]
+          user_id: string
+        }
+      }
+      has_cap: {
+        Args: {
+          p_cap: string
+          p_scope_id?: string
+          p_scope_type?: Database["public"]["Enums"]["scope_type"]
+        }
+        Returns: boolean
+      }
       is_elevated: {
         Args: { p_uid?: string }
         Returns: boolean
@@ -639,12 +773,48 @@ export type Database = {
         Args: { p_group_id: string; p_user_id?: string }
         Returns: boolean
       }
+      list_role_events: {
+        Args: { p_limit?: number; p_target_user_id?: string }
+        Returns: {
+          action: Database["public"]["Enums"]["role_action"]
+          actor_id: string | null
+          id: string
+          reason: string | null
+          role_assigned: string
+          scope_id: string | null
+          scope_type: Database["public"]["Enums"]["scope_type"] | null
+          target_id: string
+          timestamp: string
+        }[]
+      }
+      revoke_contextual_role: {
+        Args: {
+          reason?: string
+          scope_id: string
+          scope_type: Database["public"]["Enums"]["scope_type"]
+          target_user_id: string
+        }
+        Returns: undefined
+      }
       role_in: {
         Args: Record<PropertyKey, never>
         Returns: boolean
       }
+      update_global_role: {
+        Args: {
+          new_role: Database["public"]["Enums"]["global_role"]
+          reason?: string
+          target_user_id: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
+      contextual_role_type:
+        | "ministry_leader"
+        | "team_leader"
+        | "group_leader"
+        | "member"
       global_role: "admin" | "pastor" | "elder" | "member" | "guest"
       relationship_enum:
         | "spouse"
@@ -654,6 +824,7 @@ export type Database = {
         | "guardian"
         | "dependent"
       role_action: "assigned" | "revoked"
+      scope_type: "ministry" | "team" | "group_chat"
       visibility_type: "public" | "members" | "request" | "private"
     }
     CompositeTypes: {
@@ -782,6 +953,12 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      contextual_role_type: [
+        "ministry_leader",
+        "team_leader",
+        "group_leader",
+        "member",
+      ],
       global_role: ["admin", "pastor", "elder", "member", "guest"],
       relationship_enum: [
         "spouse",
@@ -792,6 +969,7 @@ export const Constants = {
         "dependent",
       ],
       role_action: ["assigned", "revoked"],
+      scope_type: ["ministry", "team", "group_chat"],
       visibility_type: ["public", "members", "request", "private"],
     },
   },
