@@ -1,6 +1,7 @@
 // app/(root)/(tabs)/admin/ministries.tsx
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Text, View, ScrollView, TouchableOpacity, Image, Alert, ActivityIndicator, Modal, TextInput } from "react-native";
+// EDIT: Added KeyboardAvoidingView, TouchableWithoutFeedback, Keyboard, and Platform
+import { Text, View, ScrollView, TouchableOpacity, Image, Alert, ActivityIndicator, Modal, TextInput, KeyboardAvoidingView, TouchableWithoutFeedback, Keyboard, Platform } from "react-native";
 import { router } from "expo-router";
 import { icons } from "@/constants";
 import { useEffect, useState } from "react";
@@ -311,62 +312,68 @@ const MinistryManagement = () => {
         animationType="slide"
         onRequestClose={() => setShowCreateModal(false)}
       >
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white rounded-t-3xl p-6">
-            <Text className="text-xl font-JakartaBold text-gray-900 mb-4">
-              Create New Ministry
-            </Text>
+        {/* EDIT: Added TouchableWithoutFeedback to dismiss keyboard on tap */}
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View className="flex-1 bg-black/50 justify-end">
+            {/* EDIT: Added KeyboardAvoidingView to prevent keyboard from covering inputs */}
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"}>
+              <View className="bg-white rounded-t-3xl p-6">
+                <Text className="text-xl font-JakartaBold text-gray-900 mb-4">
+                  Create New Ministry
+                </Text>
 
-            <View className="mb-4">
-              <Text className="text-sm font-JakartaMedium text-gray-700 mb-2">Name *</Text>
-              <TextInput
-                value={formData.name}
-                onChangeText={(text) => setFormData({ ...formData, name: text })}
-                placeholder="Enter ministry name"
-                className="bg-gray-50 rounded-xl px-4 py-3 text-base font-Jakarta text-gray-900"
-                placeholderTextColor="#9CA3AF"
-              />
-            </View>
+                <View className="mb-4">
+                  <Text className="text-sm font-JakartaMedium text-gray-700 mb-2">Name *</Text>
+                  <TextInput
+                    value={formData.name}
+                    onChangeText={(text) => setFormData({ ...formData, name: text })}
+                    placeholder="Enter ministry name"
+                    className="bg-gray-50 rounded-xl px-4 py-3 text-base font-Jakarta text-gray-900"
+                    placeholderTextColor="#9CA3AF"
+                  />
+                </View>
 
-            <View className="mb-6">
-              <Text className="text-sm font-JakartaMedium text-gray-700 mb-2">Description</Text>
-              <TextInput
-                value={formData.description}
-                onChangeText={(text) => setFormData({ ...formData, description: text })}
-                placeholder="Enter description (optional)"
-                className="bg-gray-50 rounded-xl px-4 py-3 text-base font-Jakarta text-gray-900"
-                placeholderTextColor="#9CA3AF"
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-              />
-            </View>
+                <View className="mb-6">
+                  <Text className="text-sm font-JakartaMedium text-gray-700 mb-2">Description</Text>
+                  <TextInput
+                    value={formData.description}
+                    onChangeText={(text) => setFormData({ ...formData, description: text })}
+                    placeholder="Enter description (optional)"
+                    className="bg-gray-50 rounded-xl px-4 py-3 text-base font-Jakarta text-gray-900"
+                    placeholderTextColor="#9CA3AF"
+                    multiline
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                  />
+                </View>
 
-            <View className="flex-row gap-2">
-              <TouchableOpacity
-                onPress={() => {
-                  setShowCreateModal(false);
-                  setFormData({ name: '', description: '' });
-                }}
-                className="flex-1 bg-gray-100 rounded-xl py-3"
-                disabled={creating}
-              >
-                <Text className="text-gray-700 font-JakartaSemiBold text-center">Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handleCreateMinistry}
-                className="flex-1 bg-primary-500 rounded-xl py-3"
-                disabled={creating || !formData.name.trim()}
-              >
-                {creating ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text className="text-white font-JakartaSemiBold text-center">Create</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+                <View className="flex-row gap-2">
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowCreateModal(false);
+                      setFormData({ name: '', description: '' });
+                    }}
+                    className="flex-1 bg-gray-100 rounded-xl py-3"
+                    disabled={creating}
+                  >
+                    <Text className="text-gray-700 font-JakartaSemiBold text-center">Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleCreateMinistry}
+                    className="flex-1 bg-primary-500 rounded-xl py-3"
+                    disabled={creating || !formData.name.trim()}
+                  >
+                    {creating ? (
+                      <ActivityIndicator color="white" />
+                    ) : (
+                      <Text className="text-white font-JakartaSemiBold text-center">Create</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </KeyboardAvoidingView>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
 
       {/* Create Team Modal */}
@@ -376,65 +383,71 @@ const MinistryManagement = () => {
         animationType="slide"
         onRequestClose={() => setShowTeamModal(false)}
       >
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white rounded-t-3xl p-6">
-            <Text className="text-xl font-JakartaBold text-gray-900 mb-2">
-              Create New Team
-            </Text>
-            <Text className="text-sm text-gray-500 mb-4">
-              For {selectedMinistry?.name}
-            </Text>
+        {/* EDIT: Added TouchableWithoutFeedback to dismiss keyboard on tap */}
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View className="flex-1 bg-black/50 justify-end">
+            {/* EDIT: Added KeyboardAvoidingView to prevent keyboard from covering inputs */}
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"}>
+              <View className="bg-white rounded-t-3xl p-6">
+                <Text className="text-xl font-JakartaBold text-gray-900 mb-2">
+                  Create New Team
+                </Text>
+                <Text className="text-sm text-gray-500 mb-4">
+                  For {selectedMinistry?.name}
+                </Text>
 
-            <View className="mb-4">
-              <Text className="text-sm font-JakartaMedium text-gray-700 mb-2">Name *</Text>
-              <TextInput
-                value={formData.name}
-                onChangeText={(text) => setFormData({ ...formData, name: text })}
-                placeholder="Enter team name"
-                className="bg-gray-50 rounded-xl px-4 py-3 text-base font-Jakarta text-gray-900"
-                placeholderTextColor="#9CA3AF"
-              />
-            </View>
+                <View className="mb-4">
+                  <Text className="text-sm font-JakartaMedium text-gray-700 mb-2">Name *</Text>
+                  <TextInput
+                    value={formData.name}
+                    onChangeText={(text) => setFormData({ ...formData, name: text })}
+                    placeholder="Enter team name"
+                    className="bg-gray-50 rounded-xl px-4 py-3 text-base font-Jakarta text-gray-900"
+                    placeholderTextColor="#9CA3AF"
+                  />
+                </View>
 
-            <View className="mb-6">
-              <Text className="text-sm font-JakartaMedium text-gray-700 mb-2">Description</Text>
-              <TextInput
-                value={formData.description}
-                onChangeText={(text) => setFormData({ ...formData, description: text })}
-                placeholder="Enter description (optional)"
-                className="bg-gray-50 rounded-xl px-4 py-3 text-base font-Jakarta text-gray-900"
-                placeholderTextColor="#9CA3AF"
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-              />
-            </View>
+                <View className="mb-6">
+                  <Text className="text-sm font-JakartaMedium text-gray-700 mb-2">Description</Text>
+                  <TextInput
+                    value={formData.description}
+                    onChangeText={(text) => setFormData({ ...formData, description: text })}
+                    placeholder="Enter description (optional)"
+                    className="bg-gray-50 rounded-xl px-4 py-3 text-base font-Jakarta text-gray-900"
+                    placeholderTextColor="#9CA3AF"
+                    multiline
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                  />
+                </View>
 
-            <View className="flex-row gap-2">
-              <TouchableOpacity
-                onPress={() => {
-                  setShowTeamModal(false);
-                  setFormData({ name: '', description: '' });
-                }}
-                className="flex-1 bg-gray-100 rounded-xl py-3"
-                disabled={creating}
-              >
-                <Text className="text-gray-700 font-JakartaSemiBold text-center">Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handleCreateTeam}
-                className="flex-1 bg-primary-500 rounded-xl py-3"
-                disabled={creating || !formData.name.trim()}
-              >
-                {creating ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text className="text-white font-JakartaSemiBold text-center">Create</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+                <View className="flex-row gap-2">
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowTeamModal(false);
+                      setFormData({ name: '', description: '' });
+                    }}
+                    className="flex-1 bg-gray-100 rounded-xl py-3"
+                    disabled={creating}
+                  >
+                    <Text className="text-gray-700 font-JakartaSemiBold text-center">Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleCreateTeam}
+                    className="flex-1 bg-primary-500 rounded-xl py-3"
+                    disabled={creating || !formData.name.trim()}
+                  >
+                    {creating ? (
+                      <ActivityIndicator color="white" />
+                    ) : (
+                      <Text className="text-white font-JakartaSemiBold text-center">Create</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </KeyboardAvoidingView>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </SafeAreaView>
   );

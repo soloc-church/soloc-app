@@ -730,6 +730,16 @@ export type Database = {
       }
     }
     Functions: {
+      admin_list_members: {
+        Args: { p_limit?: number; q?: string }
+        Returns: {
+          email: string
+          full_name: string
+          global_role: Database["public"]["Enums"]["global_role"]
+          id: string
+          is_active: boolean
+        }[]
+      }
       current_global_role: {
         Args: Record<PropertyKey, never>
         Returns: Database["public"]["Enums"]["global_role"]
@@ -737,6 +747,31 @@ export type Database = {
       get_authz_for_current_user: {
         Args: Record<PropertyKey, never>
         Returns: Json
+      }
+      get_role_history: {
+        Args: { p_limit?: number; p_user_id: string }
+        Returns: {
+          action: Database["public"]["Enums"]["role_action"]
+          actor_name: string
+          id: string
+          reason: string
+          role_assigned: string
+          scope_id: string
+          scope_type: Database["public"]["Enums"]["scope_type"]
+          timestamp: string
+        }[]
+      }
+      get_user_contextual_roles: {
+        Args: { p_user_id: string }
+        Returns: {
+          assigned_at: string
+          id: string
+          is_active: boolean
+          role_type: Database["public"]["Enums"]["contextual_role_type"]
+          scope_id: string
+          scope_name: string
+          scope_type: Database["public"]["Enums"]["scope_type"]
+        }[]
       }
       grant_contextual_role: {
         Args: {
@@ -773,8 +808,16 @@ export type Database = {
         Args: { p_group_id: string; p_user_id?: string }
         Returns: boolean
       }
+      list_assignable_members: {
+        Args: { p_limit?: number; q?: string }
+        Returns: {
+          email: string
+          full_name: string
+          id: string
+        }[]
+      }
       list_role_events: {
-        Args: { p_limit?: number; p_target_user_id?: string }
+        Args: { p_limit?: number; p_target?: string }
         Returns: {
           action: Database["public"]["Enums"]["role_action"]
           actor_id: string | null
@@ -785,6 +828,16 @@ export type Database = {
           scope_type: Database["public"]["Enums"]["scope_type"] | null
           target_id: string
           timestamp: string
+        }[]
+      }
+      list_scopes: {
+        Args: { p_scope_type: Database["public"]["Enums"]["scope_type"] }
+        Returns: {
+          description: string
+          id: string
+          name: string
+          parent: string
+          type: Database["public"]["Enums"]["scope_type"]
         }[]
       }
       revoke_contextual_role: {

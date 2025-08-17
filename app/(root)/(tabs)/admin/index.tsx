@@ -121,38 +121,25 @@ const AdminDashboard = () => {
   }, []);
 
   const loadDashboardStats = async () => {
-    try {
-      const [
-        { count: totalMembers },
-        { count: activeMembers },
-        { count: totalMinistries },
-        { count: totalGroups },
-        { count: pendingRequests },
-        { count: recentActivity }
-      ] = await Promise.all([
-        supabase.from('profiles').select('*', { count: 'exact', head: true }),
-        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('is_active', true),
-        supabase.from('ministries').select('*', { count: 'exact', head: true }).eq('is_active', true),
-        supabase.from('group_chats').select('*', { count: 'exact', head: true }).eq('is_active', true),
-        supabase.from('join_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-        supabase.from('role_events').select('*', { count: 'exact', head: true })
-          .gte('timestamp', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
-      ]);
+  try {
+    const { data, error } = await supabase.rpc('get_admin_stats');
+    if (error) throw error;
+    if (!data || !data[0]) throw new Error('no stats');
 
-      setStats({
-        totalMembers: totalMembers || 0,
-        activeMembers: activeMembers || 0,
-        totalMinistries: totalMinistries || 0,
-        totalGroups: totalGroups || 0,
-        pendingRequests: pendingRequests || 0,
-        recentActivity: recentActivity || 0
-      });
-    } catch (error) {
-      console.error('Error loading dashboard stats:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const s = data[0]; // PostgREST returns an array with one row
+    setStats({
+      totalMembers: s.totalmembers ?? 0,
+      activeMembers: s.activemembers ?? 0,
+      totalMinistries: s.totalministries ?? 0,
+      totalGroups: s.totalgroups ?? 0,
+      pendingRequests: s.pendingrequests ?? 0,
+      recentActivity: s.recentactivity ?? 0,
+    });
+  } catch (e) {
+    console.error('Error loading stats', e);
+  }
+};
+
 
   return (
     <SafeAreaView className="flex-1 bg-white">

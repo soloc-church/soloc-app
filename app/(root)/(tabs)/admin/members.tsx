@@ -48,7 +48,7 @@ const MemberCard = ({
   return (
     <TouchableOpacity
       onPress={onPress}
-      className="bg-white rounded-xl p-4 mb-3 shadow-sm border border-gray-100"
+      className="bg-white rounded-xl p-4 mb-3"
     >
       <View className="flex-row items-center">
         <View className="w-12 h-12 bg-primary-100 rounded-full items-center justify-center mr-3">
@@ -156,7 +156,7 @@ const MemberManagement = () => {
   const roles: (GlobalRole | 'all')[] = ['all', 'admin', 'pastor', 'elder', 'member', 'guest'];
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-white">
       {/* Header */}
       <View className="bg-white px-4 py-4 border-b border-gray-100">
         <View className="flex-row items-center">
