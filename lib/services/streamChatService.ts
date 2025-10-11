@@ -1,213 +1,128 @@
-import { StreamChat, Channel, UserResponse } from 'stream-chat';
+// app/services/streamChatService.ts
+// Stateless helpers for Stream Chat operations. Do NOT create or own the client here.
+// In your React tree, create the client once and pass it in (or read from useChatContext()).
+
+import type { StreamChat, Channel } from 'stream-chat';
 import { supabase } from '../supabase';
 
-const STREAM_API_KEY = process.env.EXPO_PUBLIC_STREAM_KEY
-const API_BASE =  process.env.EXPO_PUBLIC_API_URL!;
+const API_BASE = process.env.EXPO_PUBLIC_API_URL!; // e.g. https://<project>.functions.supabase.co
 
-type TokenPayload = { token: string; apiKey?: string; streamUserId: string };
+type TokenResponse = { token: string; streamUserId: string };
 
-
-
-async function getAuthHeader (): Promise<string> {
-  const {data: {session}} = await supabase.auth.getSession();
-  if(!session?.access_token) throw new Error ('Not Authenticated');
+async function authHeader(): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error('Not authenticated');
   return `Bearer ${session.access_token}`;
 }
 
-// call stream-token; return token, mapped stream userid
-async function fetchTokenPayload (): Promise<TokenPayload> {
-  const auth = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/stream-token`, {
-    method: 'POST',
-    headers: { Authorization: auth, 'Content-Type': 'application/json' },
+async function api<T = any>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, init);
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.error ?? `Request failed: ${res.status}`);
+  return json as T;
+}
+
+/** Fetch a Stream user token for the current Supabase user. */
+export async function fetchStreamToken(): Promise<TokenResponse> {
+  const headers = new Headers({
+    Authorization: await authHeader(),
+    'Content-Type': 'application/json',
   });
-  const json = await res.json();
-  if(!res.ok) throw new Error(json.error || 'Fetching stream failed');
-
-  return {token: json.token, apiKey: json.apiKey, streamUserId: json.streamUserId}
+  return api<TokenResponse>(`/stream-token`, { method: 'POST', headers });
 }
 
-// uses cached token; refreshes on demand
-function makeTokenProvider(firstToken: string) {
-  let cached = firstToken;
-  return async () => {
-    if (cached) {
-      const t = cached;
-      cached = null;
-      return t;
-    } else {
-      const next = await fetchTokenPayload();
-      return next.token;
-    }
-  }
+/** Connect the current Supabase user to the provided Stream client. */
+export async function connectCurrentUser(client: StreamChat): Promise<{ streamUserId: string }> {
+  const { token, streamUserId } = await fetchStreamToken();
+  // Connect without storing any module-level state.
+  await client.connectUser({ id: streamUserId }, token);
+  return { streamUserId };
 }
 
-export class StreamChatService {
-  private client: StreamChat | null = null;
-  private currentUser: UserResponse | null = null;
-  private streamUserId: string | null = null;
-
-  //initialize the stream client
-  async initialize () {
-    if(!this.client) {
-      this.client = StreamChat.getInstance(STREAM_API_KEY);
-    }
-
-    return this.client;
-  }
-
-  // connect current user to stream chat
-  async connectUser() {
-    const { data: {user}, } = await supabase.auth.getUser();
-    if(!user) throw new Error("Not Authenticated");
-
-    const { data: profile} = await supabase
-      .from('prpofiles')
-      .select('full_name, profile_image_url')
-      .eq('id', user.id)
-      .single();
-
-    const first = await fetchTokenPayload();
-    this.streamUserId = first.streamUserId;
-
-    //token provider for renewals
-    const tokenProvider = makeTokenProvider(first.token);
-
-
-    //connect
-    await this.client!.connectUser(
-      {
-        id: this.streamUserId,
-        name: profile?.full_name ?? user.email ?? user.id,
-        image: profile?.profile_image_url ?? undefined,
-      },
-      tokenProvider
-    );
-    this.currentUser = this.client!.user;
-
-    return this.currentUser;
-  }
-
-  // disconnect
-  async disconnect () {
-    if (this.client && this.currentUser) {
-      await this.client.disconnectUser();
-      this.currentUser = null;
-      this.streamUserId = null;
-    }
-  }
-
-  async getOrCreateDMChannel(otherUserId: string): Promise<Channel> {
-    if(!this.client || this.streamUserId) throw new Error("Stream chat not connected");
-
-    const auth = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/stream-channels/dm`, {
-      method: 'POST',
-      headers: { Authorization: auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({otherUserId}),
-    });
-
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Failed to create DM channel');
-
-    const [type, id] = String(json.cid).split(':');
-    const channel = this.client.channel(type, id);
-    await channel.watch();
-
-    return channel;
-  }
-
-  async getOrCreateGroupChannel(groupId: string): Promise<Channel> {
-    if (!this.client || !this.streamUserId) throw new Error('Stream Chat not connected');
-
-    const auth = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/stream-channels/ensure-group`, {
-      method: 'POST',
-      headers: { Authorization: auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ groupChatId: groupId }),
-    });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Failed to ensure group channel');
-
-    const [type, id] = String(json.cid).split(':');
-    const channel = this.client.channel(type, id);
-    await channel.watch();
-    return channel;
-  } 
-
-  async joinGroupChannel(groupId: string): Promise<Channel> {
-    if (!this.client || !this.streamUserId) throw new Error('Stream Chat not connected');
-
-    const auth = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/stream-channels/join-group`, {
-      method: 'POST',
-      headers: { Authorization: auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ groupChatId: groupId }),
-    });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Failed to join group');
-
-    // After joining, ensure & watch the channel
-    return this.getOrCreateGroupChannel(groupId);
-  }
-
-  async leaveGroupChannel(groupId: string): Promise<void> {
-    if (!this.client || !this.streamUserId) throw new Error('Stream Chat not connected');
-
-    const auth = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/stream-channels/leave-group`, {
-      method: 'POST',
-      headers: { Authorization: auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ groupChatId: groupId }),
-    });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Failed to leave group');
-  }
-
-  // get user's dm channels
-  async getUserDMChannels(): Promise<Channel[]> {
-    if (!this.client || !this.streamUserId) throw new Error('Stream Chat not connected');
-
-    const filter = { type: 'messaging', members: { $in: [this.streamUserId] } };
-    const sort = [{ last_message_at: -1 as const }];
-    const channels = await this.client.queryChannels(filter, sort);
-    return channels;
-  }
-
-  async getUserGroupChannels(): Promise<Channel[]> {
-    if (!this.client || !this.streamUserId) throw new Error('Stream Chat not connected');
-
-    const filter = { type: 'team', members: { $in: [this.streamUserId] } };
-    const sort = [{ last_message_at: -1 as const }];
-    const channels = await this.client.queryChannels(filter, sort);
-    return channels;
-  }
-
-   /** Admin updates go through the server so RBAC is enforced */
-  async updateGroupChannel(groupId: string, updates: { name?: string; description?: string }) {
-    const auth = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/stream-channels/update-group`, {
-      method: 'PATCH',
-      headers: { Authorization: auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ groupChatId: groupId, ...updates }),
-    });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Failed to update group');
-  }
-
-  async deleteGroupChannel(groupId: string) {
-    const auth = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/stream-channels/delete-group`, {
-      method: 'DELETE',
-      headers: { Authorization: auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ groupChatId: groupId }),
-    });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Failed to delete group');
-  }
-
-  getClient(): StreamChat | null { return this.client; }
-  getCurrentUser(): UserResponse | null { return this.currentUser; }
+/** Ensure a group chat channel exists and return it. */
+export async function ensureGroup(client: StreamChat, groupChatId: string): Promise<Channel> {
+  const headers = new Headers({
+    Authorization: await authHeader(),
+    'Content-Type': 'application/json',
+  });
+  const { cid } = await api<{ cid: string }>(`/stream-channels/ensure-group`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ groupChatId }),
+  });
+  const [type, id] = cid.split(':');
+  const channel = client.channel(type as any, id);
+  await channel.watch();
+  return channel;
 }
 
-export const streamChatService = new StreamChatService();
+/** Start or fetch a 1:1 DM channel between the current user and otherUserId. */
+export async function dm(client: StreamChat, otherUserId: string): Promise<Channel> {
+  const headers = new Headers({
+    Authorization: await authHeader(),
+    'Content-Type': 'application/json',
+  });
+  const { cid } = await api<{ cid: string }>(`/stream-channels/dm`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ otherUserId }),
+  });
+  const [type, id] = cid.split(':');
+  const channel = client.channel(type as any, id);
+  await channel.watch();
+  return channel;
+}
+
+export async function joinGroup(client: StreamChat, groupChatId: string): Promise<void> {
+  const headers = new Headers({
+    Authorization: await authHeader(),
+    'Content-Type': 'application/json',
+  });
+  await api(`/stream-channels/join-group`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ groupChatId }),
+  });
+}
+
+export async function leaveGroup(client: StreamChat, groupChatId: string): Promise<void> {
+  const headers = new Headers({
+    Authorization: await authHeader(),
+    'Content-Type': 'application/json',
+  });
+  await api(`/stream-channels/leave-group`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ groupChatId }),
+  });
+}
+
+export async function updateGroup(
+  client: StreamChat,
+  groupChatId: string,
+  updates: Record<string, any>,
+): Promise<void> {
+  const headers = new Headers({
+    Authorization: await authHeader(),
+    'Content-Type': 'application/json',
+  });
+  await api(`/stream-channels/update-group`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ groupChatId, updates }),
+  });
+}
+
+export async function deleteGroup(client: StreamChat, groupChatId: string): Promise<void> {
+  const headers = new Headers({
+    Authorization: await authHeader(),
+    'Content-Type': 'application/json',
+  });
+  await api(`/stream-channels/delete-group`, {
+    method: 'DELETE',
+    headers,
+    body: JSON.stringify({ groupChatId }),
+  });
+}
+
+// NOTE: We intentionally do not export any getters or state. These are *pure* helpers.

@@ -6,20 +6,14 @@ import {
   TouchableOpacity,
   TextInput,
   Image,
-  FlatList,
   ActivityIndicator,
-  RefreshControl,
-  Modal,
-  KeyboardAvoidingView,
-  Platform,
   Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { icons } from '@/constants';
 import { useAuth } from '@/contexts/AuthContext';
-import { streamChatService } from '@/lib/services/streamChatService';
-import { supabase } from '@/lib/supabase';
+import { useStreamClient } from '@/providers/StreamProvider';
 import { useAuthz } from '@/hooks/useAuthz';
 import { can } from '@/lib/rbac/permissions';
 
@@ -32,33 +26,11 @@ type TabType = 'messages' | 'discover';
 export default function MessageScreen() {
   const { user } = useAuth();
   const { authz } = useAuthz();
+  const { isConnected } = useStreamClient();
   const [activeTab, setActiveTab] = useState<TabType>('messages');
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [slideAnim] = useState(new Animated.Value(0));
   const [fadeAnim] = useState(new Animated.Value(1));
-
-  // Initialize Stream Chat
-  useEffect(() => {
-    if (user?.id) {
-      initializeChat();
-    }
-    
-    return () => {
-      streamChatService.disconnect();
-    };
-  }, [user?.id]);
-
-  const initializeChat = async () => {
-    try {
-      setLoading(true);
-      await streamChatService.connectUser();
-    } catch (error) {
-      console.error('Failed to connect to chat:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleTabChange = (tab: TabType) => {
     if (tab === activeTab) return;
@@ -94,12 +66,12 @@ export default function MessageScreen() {
     });
   };
 
-  if (loading) {
+  if (!isConnected) {
     return (
       <SafeAreaView className="flex-1 bg-white">
         <View className="flex-1 justify-center items-center">
           <ActivityIndicator size="large" color="#A89BB5" />
-          <Text className="text-gray-500 mt-3">Connecting to chat...</Text>
+          <Text className="text-gray-500 mt-3">Connecting to messages...</Text>
         </View>
       </SafeAreaView>
     );
