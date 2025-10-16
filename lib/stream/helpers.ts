@@ -17,6 +17,11 @@ export async function openDMChannel(
     throw new Error(result.error.message || 'Failed to create DM channel');
   }
 
+  // DEBUG
+  console.log('client.userID', client.userID);  
+  console.log('openDMChannel raw result:', result);
+  console.log('openDMChannel data:', result?.data);
+
   const { data } = result;
   const [type, id] = data.cid.split(':');
   const channel = client.channel(type, id);

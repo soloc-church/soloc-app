@@ -71,6 +71,7 @@ export function createStreamApi({ apiBase, getAuthHeader, fetchImpl }: ApiDeps) 
           }
           return { ok: false, error: err };
         }
+        console.log('requesting', `${apiBase}${path}`);
 
         return { ok: true, data: (body as T) };
       } catch (e: any) {
@@ -85,8 +86,13 @@ export function createStreamApi({ apiBase, getAuthHeader, fetchImpl }: ApiDeps) 
           continue;
         }
         return { ok: false, error: err };
+        
       }
+
+      
     }
+
+
     // should be unreachable
     return { ok: false, error: { code: 'UNKNOWN', message: 'Unknown error', status: 0 } };
   }

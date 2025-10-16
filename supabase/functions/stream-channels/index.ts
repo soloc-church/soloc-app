@@ -82,15 +82,17 @@ async function ensureGroupChannel(
     // Channel already exists, which is fine
   }
 
+  const cid = channel.cid ?? `${channel.type}:${group.id}`;
+
   // Update DB with channel ID if not set
   if (!group.stream_channel_id) {
     await supabase
       .from('group_chats')
-      .update({ stream_channel_id: channel.cid })
+      .update({ stream_channel_id: cid })
       .eq('id', group.id);
   }
 
-  return { channel, group };
+  return { channel, group, cid };
 }
 
 Deno.serve(async (req) => {
@@ -128,6 +130,8 @@ Deno.serve(async (req) => {
         // Channel already exists
       }
 
+      const cid = channel.cid ?? `${channel.type}:${dmId}`;
+
       // Store in database
       await supabase
         .from('direct_message_channels')
@@ -135,12 +139,12 @@ Deno.serve(async (req) => {
           {
             user1_id: members[0],
             user2_id: members[1],
-            stream_channel_id: channel.cid,
+            stream_channel_id: cid,
           },
           { onConflict: 'user1_id,user2_id' }
         );
 
-      return jsonResponse({ cid: channel.cid });
+      return jsonResponse({ cid });
     }
 
     // Route: POST /create-group - Create new group
@@ -180,13 +184,15 @@ Deno.serve(async (req) => {
       await channel.create();
       await channel.addMembers(allMembers);
 
+      const cid = channel.cid ?? `${channel.type}:${group.id}`;
+
       // Update group with channel ID
       await supabase
         .from('group_chats')
-        .update({ stream_channel_id: channel.cid })
+        .update({ stream_channel_id: cid })
         .eq('id', group.id);
 
-      return jsonResponse({ id: group.id, cid: channel.cid });
+      return jsonResponse({ id: group.id, cid });
     }
 
     // Route: POST /ensure-group - Ensure group channel exists
@@ -196,8 +202,8 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: 'groupChatId required' }, 400);
       }
 
-      const { channel } = await ensureGroupChannel(supabase, stream, groupChatId);
-      return jsonResponse({ cid: channel.cid });
+      const { cid } = await ensureGroupChannel(supabase, stream, groupChatId);
+      return jsonResponse({ cid });
     }
 
     // Route: POST /join-group - Join a group

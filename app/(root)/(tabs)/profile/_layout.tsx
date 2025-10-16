@@ -10,7 +10,8 @@ export default function ProfileStack() {
       <Stack.Screen name="privacy" options={{ title: "Privacy policy" }} />
       <Stack.Screen name="copyrights" options={{ title: "Copyrights" }} />
       <Stack.Screen name="directory" options={{ title: "Directory" }} />
+      <Stack.Screen name="directory/[id]" options={{ title: "Member Profile" }} />
       <Stack.Screen name="feedback" options={{ title: "Feedback" }} />
     </Stack>
   );
-} 
+}
