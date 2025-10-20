@@ -1,8 +1,7 @@
-import React from 'react';
+// app/(root)/(tabs)/profile/directory/[id].tsx
+import React, { useState, useEffect } from 'react';
 import {
   SafeAreaView,
-} from 'react-native-safe-area-context';
-import {
   ActivityIndicator,
   Image,
   ScrollView,
@@ -15,264 +14,201 @@ import { icons } from '@/constants';
 import { supabase } from '@/lib/supabase';
 import { Database } from '@/types/database.types';
 import { useStreamClient } from '@/providers/StreamProvider';
-import { createStreamApi, type StreamApi } from '@/lib/stream/api';
+import { createStreamApi } from '@/lib/stream/api';
 import { openDMChannel } from '@/lib/stream/helpers';
 
 type DirectoryProfile = Pick<
   Database['public']['Tables']['profiles']['Row'],
   'id' | 'full_name' | 'email' | 'phone' | 'address' | 'birthday' | 'profile_image_url' | 'global_role' | 'joined_date' | 'is_active'
 >;
-type GlobalRole = Database['public']['Enums']['global_role'];
-
-const InfoCard = ({ label, value }: { label: string; value: string }) => (
-  <View className="bg-white rounded-xl px-4 py-3 border border-gray-100 mb-3">
-    <Text className="text-xs font-JakartaSemiBold uppercase text-gray-400">
-      {label}
-    </Text>
-    <Text className="text-base font-JakartaSemiBold text-gray-900 mt-1">
-      {value}
-    </Text>
-  </View>
-);
 
 export default function DirectoryProfileDetail() {
-  const params = useLocalSearchParams<{ id?: string | string[] }>();
-  const profileId = React.useMemo(() => {
-    const value = params.id;
-    if (!value) return undefined;
-    return Array.isArray(value) ? value[0] : value;
-  }, [params.id]);
-
+  const params = useLocalSearchParams<{ id?: string }>();
+  const profileId = Array.isArray(params.id) ? params.id[0] : params.id;
+  
   const { client, isConnected } = useStreamClient();
-  const [profile, setProfile] = React.useState<DirectoryProfile | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const [startingChat, setStartingChat] = React.useState(false);
-  const [currentUserId, setCurrentUserId] = React.useState<string | null>(null);
+  const [profile, setProfile] = useState<DirectoryProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [startingChat, setStartingChat] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  const apiBase = process.env.EXPO_PUBLIC_API_URL;
-
-  const streamApi = React.useMemo<StreamApi | null>(() => {
-    if (!apiBase) {
-      console.warn('EXPO_PUBLIC_API_URL is not set; cannot configure Stream API client.');
-      return null;
-    }
+  const streamApi = React.useMemo(() => {
+    const apiBase = process.env.EXPO_PUBLIC_API_URL;
+    if (!apiBase) return null;
 
     return createStreamApi({
       apiBase,
       getAuthHeader: async () => {
         const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
-        if (!token) {
-          throw new Error('Not authenticated');
-        }
-        return `Bearer ${token}`;
+        return `Bearer ${session?.access_token || ''}`;
       },
-    });
-  }, [apiBase]);
-
-  React.useEffect(() => {
-    let isMounted = true;
-
-    const fetchProfile = async () => {
-      if (!profileId) {
-        setError('Profile not found.');
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setLoading(true);
-        setError(null);
-
-        const [{ data: authData, error: authError }, { data: profileData, error: profileError }] = await Promise.all([
-          supabase.auth.getUser(),
-          supabase
-            .from('profiles')
-            .select('id, full_name, email, phone, address, birthday, profile_image_url, global_role, joined_date, is_active')
-            .eq('id', profileId)
-            .maybeSingle(),
-        ]);
-
-        if (authError) throw authError;
-        if (profileError) throw profileError;
-        if (!profileData || profileData.is_active === false) {
-          throw new Error('Profile not found');
-        }
-
-        if (!isMounted) return;
-
-        setCurrentUserId(authData.user?.id ?? null);
-        setProfile(profileData);
-      } catch (err) {
-        console.error('Error loading profile:', err);
-        if (isMounted) {
-          setError('Unable to load this profile right now.');
-          setProfile(null);
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    fetchProfile();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [profileId]);
-
-  const formatDate = React.useCallback((value?: string | null) => {
-    if (!value) return null;
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return null;
-    }
-    return date.toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
     });
   }, []);
 
-  const handleStartChat = async () => {
-    if (!profileId || !profile) {
-      return;
-    }
+  useEffect(() => {
+    fetchProfile();
+  }, [profileId]);
 
-    if (currentUserId && currentUserId === profileId) {
-      return;
-    }
-
-    if (!isConnected) {
-      alert('Please wait for chat to connect');
-      return;
-    }
-
-    if (!streamApi) {
-      console.error('Stream API client is not configured.');
-      alert('Chat is not available right now. Please try again later.');
+  const fetchProfile = async () => {
+    if (!profileId) {
+      setLoading(false);
       return;
     }
 
     try {
-      setStartingChat(true);
+      const [authRes, profileRes] = await Promise.all([
+        supabase.auth.getUser(),
+        supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', profileId)
+          .single(),
+      ]);
 
+      if (profileRes.data) {
+        setProfile(profileRes.data);
+        setCurrentUserId(authRes.data.user?.id ?? null);
+      }
+    } catch (error) {
+      console.error('Error loading profile:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStartChat = async () => {
+    if (!profileId || !profile || !isConnected || !streamApi) return;
+    
+    if (currentUserId === profileId) return;
+
+    setStartingChat(true);
+    try {
+      //DEBUG
+      console.log('[DEBUG][directory/profile] handleStartChat start', {
+        profileId,
+        currentUserId,
+        streamApiBase: process.env.EXPO_PUBLIC_API_URL,
+      });
       const channel = await openDMChannel(client, streamApi, profileId);
-
+      //DEBUG
+      console.log('[DEBUG][directory/profile] handleStartChat channel', {
+        channelId: channel.id,
+        channelCid: channel.cid,
+        idLength: channel.id?.length,
+      });
+      
       router.push({
-        pathname: '/(root)/messages',
+        pathname: '/(root)/chat/channel',
         params: {
-          channelCid: channel.cid,
-          channelType: 'dm',
+          channelId: channel.id!,
+          channelType: 'messaging',
+          channelName: profile.full_name || 'Direct Message'
         }
       });
-    } catch (err) {
-      console.error('Error starting chat:', err);
+    } catch (error) {
+      console.error('Error starting chat:', error);
       alert('Failed to start chat. Please try again.');
     } finally {
       setStartingChat(false);
     }
   };
 
-  const displayName = profile?.full_name?.trim()
-    ? profile.full_name
-    : 'Unnamed Member';
-  const displayRole = (profile?.global_role ?? 'member') as GlobalRole;
-  const roleLabel = `${displayRole.charAt(0).toUpperCase()}${displayRole.slice(1)}`;
-  const initials = displayName.charAt(0).toUpperCase();
-  const canMessage = !!profile && !!profileId && currentUserId !== profileId;
-  const formattedBirthday = formatDate(profile?.birthday);
-  const formattedJoinedDate = formatDate(profile?.joined_date);
+  const formatDate = (dateString?: string | null) => {
+    if (!dateString) return null;
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
 
-  return (
-    <SafeAreaView className="flex-1 bg-gray-50">
-      <View className="bg-white border-b border-gray-100 px-4 py-3">
-        <View className="flex-row items-center">
-          <TouchableOpacity onPress={() => router.back()} className="mr-3">
-            <Image
-              source={icons.backArrow}
-              className="w-6 h-6"
-              style={{ tintColor: '#4B5563' }}
-            />
-          </TouchableOpacity>
-          <Text className="text-xl font-JakartaBold text-gray-900">
-            Member Profile
-          </Text>
-        </View>
-      </View>
-
-      {loading ? (
+  if (loading) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50">
         <View className="flex-1 justify-center items-center">
           <ActivityIndicator size="large" color="#A89BB5" />
         </View>
-      ) : error ? (
-        <View className="flex-1 justify-center items-center px-8">
-          <Text className="text-center text-base text-gray-600">
-            {error}
-          </Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50">
+        <View className="px-4 py-3">
+          <TouchableOpacity onPress={() => router.back()}>
+            <Image source={icons.backArrow} className="w-6 h-6" style={{ tintColor: '#4B5563' }} />
+          </TouchableOpacity>
         </View>
-      ) : !profile ? (
-        <View className="flex-1 justify-center items-center px-8">
-          <Text className="text-center text-base text-gray-600">
-            Profile not available.
-          </Text>
+        <View className="flex-1 justify-center items-center">
+          <Text className="text-gray-500">Profile not found</Text>
         </View>
-      ) : (
-        <>
-          <ScrollView
-            className="flex-1"
-            contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 32 }}
-            showsVerticalScrollIndicator={false}
-          >
-            <View className="items-center mt-8">
-              <View className="w-24 h-24 rounded-full bg-primary-100 items-center justify-center mb-4 overflow-hidden">
-                {profile.profile_image_url ? (
-                  <Image
-                    source={{ uri: profile.profile_image_url }}
-                    className="w-24 h-24 rounded-full"
-                  />
-                ) : (
-                  <Text className="text-3xl font-JakartaBold text-primary-600">
-                    {initials}
-                  </Text>
-                )}
+      </SafeAreaView>
+    );
+  }
+
+  const displayName = profile.full_name?.trim() || 'Unnamed Member';
+  const canMessage = profileId && currentUserId !== profileId;
+
+  return (
+    <SafeAreaView className="flex-1 bg-gray-50">
+      {/* Header */}
+      <View className="bg-white px-4 py-3">
+        <TouchableOpacity onPress={() => router.back()}>
+          <Image
+            source={icons.backArrow}
+            className="w-6 h-6"
+            style={{ tintColor: '#4B5563' }}
+          />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView 
+        className="flex-1"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Profile Card */}
+        <View className="bg-white">
+          <View className="items-center py-8">
+            <View className="w-32 h-32 rounded-full bg-gray-100 items-center justify-center mb-4">
+              {profile.profile_image_url ? (
+                <Image
+                  source={{ uri: profile.profile_image_url }}
+                  className="w-32 h-32 rounded-full"
+                />
+              ) : (
+                <Text className="text-4xl font-JakartaBold text-gray-600">
+                  {displayName.charAt(0).toUpperCase()}
+                </Text>
+              )}
+            </View>
+            
+            <Text className="text-2xl font-JakartaBold text-gray-900 text-center">
+              {displayName}
+            </Text>
+            
+            {profile.global_role && (
+              <View className="mt-2 px-4 py-1 bg-primary-100 rounded-full">
+                <Text className="text-primary-600 capitalize font-JakartaSemiBold">
+                  {profile.global_role}
+                </Text>
               </View>
-              <Text className="text-2xl font-JakartaBold text-gray-900 text-center">
-                {displayName}
-              </Text>
-              <Text className="text-base text-gray-500 mt-2 capitalize">
-                {roleLabel}
-              </Text>
-            </View>
+            )}
+          </View>
 
-            <View className="mt-10">
-              {profile.phone && <InfoCard label="Phone" value={profile.phone} />}
-              {profile.email && <InfoCard label="Email" value={profile.email} />}
-              {profile.address && <InfoCard label="Address" value={profile.address} />}
-
-              {formattedBirthday && (
-                <InfoCard label="Birthday" value={formattedBirthday} />
-              )}
-
-              {formattedJoinedDate && (
-                <InfoCard label="Member Since" value={formattedJoinedDate} />
-              )}
-            </View>
-          </ScrollView>
-
+          {/* Message Button */}
           {canMessage && (
             <View className="px-6 pb-6">
               <TouchableOpacity
                 onPress={handleStartChat}
-                disabled={startingChat}
-                activeOpacity={0.9}
-                className="bg-primary-500 px-4 py-3 rounded-xl flex-row items-center justify-center"
+                disabled={startingChat || !isConnected}
+                className={`${
+                  startingChat || !isConnected ? 'bg-gray-300' : 'bg-primary-500'
+                } py-3 rounded-xl flex-row items-center justify-center`}
               >
                 {startingChat ? (
-                  <ActivityIndicator size="small" color="white" />
+                  <ActivityIndicator color="white" />
                 ) : (
                   <>
                     <Image
@@ -281,15 +217,82 @@ export default function DirectoryProfileDetail() {
                       style={{ tintColor: 'white' }}
                     />
                     <Text className="text-white font-JakartaSemiBold text-base">
-                      Message {displayName.split(' ')[0]}
+                      Send Message
                     </Text>
                   </>
                 )}
               </TouchableOpacity>
             </View>
           )}
-        </>
-      )}
+        </View>
+
+        {/* Contact Information */}
+        <View className="mt-3 bg-white px-6 py-6">
+          <Text className="text-sm font-JakartaSemiBold text-gray-500 uppercase mb-4">
+            Contact Information
+          </Text>
+          
+          {profile.phone ? (
+            <View className="mb-4">
+              <Text className="text-xs text-gray-500 mb-1">Phone</Text>
+              <Text className="text-base text-gray-900 font-JakartaMedium">
+                {profile.phone}
+              </Text>
+            </View>
+          ) : null}
+          
+          {profile.email ? (
+            <View className="mb-4">
+              <Text className="text-xs text-gray-500 mb-1">Email</Text>
+              <Text className="text-base text-gray-900 font-JakartaMedium">
+                {profile.email}
+              </Text>
+            </View>
+          ) : null}
+          
+          {profile.address ? (
+            <View className="mb-4">
+              <Text className="text-xs text-gray-500 mb-1">Address</Text>
+              <Text className="text-base text-gray-900 font-JakartaMedium">
+                {profile.address}
+              </Text>
+            </View>
+          ) : null}
+
+          {!profile.phone && !profile.email && !profile.address && (
+            <Text className="text-gray-400 italic">No contact information available</Text>
+          )}
+        </View>
+
+        {/* Additional Information */}
+        <View className="mt-3 mb-6 bg-white px-6 py-6">
+          <Text className="text-sm font-JakartaSemiBold text-gray-500 uppercase mb-4">
+            Additional Information
+          </Text>
+          
+          {profile.birthday ? (
+            <View className="mb-4">
+              <Text className="text-xs text-gray-500 mb-1">Birthday</Text>
+              <Text className="text-base text-gray-900 font-JakartaMedium">
+                {formatDate(profile.birthday)}
+              </Text>
+            </View>
+          ) : null}
+          
+          {profile.joined_date ? (
+            <View>
+              <Text className="text-xs text-gray-500 mb-1">Member Since</Text>
+              <Text className="text-base text-gray-900 font-JakartaMedium">
+                {formatDate(profile.joined_date)}
+              </Text>
+            </View>
+          ) : null}
+
+          {!profile.birthday && !profile.joined_date && (
+            <Text className="text-gray-400 italic">No additional information available</Text>
+          )}
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

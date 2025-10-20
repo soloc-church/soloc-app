@@ -1,6 +1,5 @@
 // app/(root)/(tabs)/profile/directory.tsx
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,167 +7,111 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
+  TextInput,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { icons } from '@/constants';
-import { useStreamClient } from '@/providers/StreamProvider';
-import { createStreamApi, type StreamApi } from '@/lib/stream/api';
-import { openDMChannel } from '@/lib/stream/helpers';
 import { supabase } from '@/lib/supabase';
 import { ProfileService } from '@/lib/services/profileService';
 import { Database } from '@/types/database.types';
 
 type DirectoryProfile = Pick<
   Database['public']['Tables']['profiles']['Row'],
-  'id' | 'full_name' | 'email' | 'phone' | 'address' | 'birthday' | 'profile_image_url' | 'global_role' | 'is_active' | 'joined_date'
+  'id' | 'full_name' | 'email' | 'phone' | 'profile_image_url' | 'global_role' | 'is_active'
 >;
-type GlobalRole = Database['public']['Enums']['global_role'];
 
 export default function DirectoryScreen() {
-  const { client, isConnected } = useStreamClient();
   const [profiles, setProfiles] = useState<DirectoryProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [userRole, setUserRole] = useState<GlobalRole | null>(null);
-  const [startingChat, setStartingChat] = useState<string | null>(null);
-  const apiBase = process.env.EXPO_PUBLIC_API_URL;
+  const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [userRole, setUserRole] = useState<Database['public']['Enums']['global_role'] | null>(null);
 
-  const streamApi = React.useMemo<StreamApi | null>(() => {
-    if (!apiBase) {
-      console.warn('EXPO_PUBLIC_API_URL is not set; cannot configure Stream API client.');
-      return null;
-    }
-
-    return createStreamApi({
-      apiBase,
-      getAuthHeader: async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
-        if (!token) {
-          throw new Error('Not authenticated');
-        }
-        return `Bearer ${token}`;
-      },
-    });
-  }, [apiBase]);
-
-  // Load profiles from Supabase
-  React.useEffect(() => {
-    const initializeDirectory = async () => {
-      try {
-        const role = await ProfileService.getCurrentUserRole();
-        setUserRole(role);
-
-        if (role === 'guest') {
-          setProfiles([]);
-          setLoading(false);
-          return;
-        }
-
-        await loadProfiles();
-      } catch (err) {
-        console.error('Error determining directory access:', err);
-        setError('Unable to load the directory right now.');
-        setProfiles([]);
-        setLoading(false);
-      }
-    };
-
+  useEffect(() => {
     initializeDirectory();
   }, []);
 
-  const loadProfiles = async () => {
+  const initializeDirectory = async () => {
     try {
-      setError(null);
-      setLoading(true);
+      const role = await ProfileService.getCurrentUserRole();
+      setUserRole(role);
 
-      const { data, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, phone, address, birthday, profile_image_url, global_role, is_active, joined_date')
-        .eq('is_active', true)
-        .order('full_name');
+      if (role === 'guest') {
+        setProfiles([]);
+        setLoading(false);
+        return;
+      }
 
-      if (profileError) throw profileError;
-
-      const directoryProfiles: DirectoryProfile[] = data || [];
-
-      // Filter out the current user
-      const { data: { user } } = await supabase.auth.getUser();
-      const filtered = directoryProfiles.filter(p => p.id !== user?.id);
-
-      setProfiles(filtered);
-    } catch (error) {
-      console.error('Error loading profiles:', error);
-      setError('Unable to load the directory right now.');
+      await loadProfiles();
+    } catch (err) {
+      console.error('Error loading directory:', err);
       setProfiles([]);
-    } finally {
       setLoading(false);
     }
   };
 
-  const handleStartChat = async (profile: DirectoryProfile) => {
-    if (!isConnected) {
-      alert('Please wait for chat to connect');
-      return;
-    }
-    if (!streamApi) {
-      console.error('Stream API client is not configured.');
-      alert('Chat is not available right now. Please try again later.');
-      return;
-    }
+  const loadProfiles = async (isRefreshing = false) => {
+    if (isRefreshing) setRefreshing(true);
+    else setLoading(true);
 
     try {
-      setStartingChat(profile.id);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, phone, profile_image_url, global_role, is_active')
+        .eq('is_active', true)
+        .order('full_name');
 
-      // Start the DM chat
-      const channel = await openDMChannel(client, streamApi, profile.id);
+      if (error) throw error;
 
-      // Navigate to the messages screen with the channel
-      // The messages screen will handle showing this specific channel
-      router.push({
-        pathname: '/(root)/messages',
-        params: {
-          channelCid: channel.cid,
-          channelType: 'dm',
-        }
-      });
+      const { data: { user } } = await supabase.auth.getUser();
+      const filtered = (data || []).filter(p => p.id !== user?.id);
+      setProfiles(filtered);
     } catch (error) {
-      console.error('Error starting chat:', error);
-      alert('Failed to start chat. Please try again.');
+      console.error('Error loading profiles:', error);
+      setProfiles([]);
     } finally {
-      setStartingChat(null);
+      setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const handleOpenProfile = (profileId: string) => {
-    router.push({
-      pathname: '/(root)/(tabs)/profile/directory/[id]',
-      params: { id: profileId },
-    });
-  };
+  const filteredProfiles = profiles.filter(profile => {
+    const name = profile.full_name?.toLowerCase() || '';
+    const email = profile.email?.toLowerCase() || '';
+    const query = searchQuery.toLowerCase();
+    return name.includes(query) || email.includes(query);
+  });
 
   const renderProfile = ({ item }: { item: DirectoryProfile }) => {
-    const isStartingChat = startingChat === item.id;
-    const displayRole = (item.global_role ?? 'member') as GlobalRole;
-    const roleLabel = `${displayRole.charAt(0).toUpperCase()}${displayRole.slice(1)}`;
-    const displayName = item.full_name?.trim() ? item.full_name : 'Unnamed Member';
+    const displayName = item.full_name?.trim() || 'Unnamed Member';
+    const roleColors = {
+      admin: 'text-red-600',
+      pastor: 'text-purple-600',
+      elder: 'text-blue-600',
+      member: 'text-green-600',
+      guest: 'text-gray-600'
+    };
 
     return (
       <TouchableOpacity
-        onPress={() => handleOpenProfile(item.id)}
-        className="bg-white px-4 py-3 flex-row items-center border-b border-gray-50"
+        onPress={() => router.push({
+          pathname: '/(root)/(tabs)/profile/directory/[id]',
+          params: { id: item.id },
+        })}
+        className="bg-white px-4 py-4 flex-row items-center"
         activeOpacity={0.8}
       >
         {/* Avatar */}
-        <View className="w-12 h-12 bg-primary-100 rounded-full items-center justify-center mr-3">
+        <View className="w-14 h-14 bg-gray-100 rounded-full items-center justify-center mr-4">
           {item.profile_image_url ? (
             <Image
               source={{ uri: item.profile_image_url }}
-              className="w-12 h-12 rounded-full"
+              className="w-14 h-14 rounded-full"
             />
           ) : (
-            <Text className="text-lg font-JakartaBold text-primary-600">
+            <Text className="text-xl font-JakartaBold text-gray-600">
               {displayName.charAt(0).toUpperCase()}
             </Text>
           )}
@@ -179,48 +122,28 @@ export default function DirectoryScreen() {
           <Text className="text-base font-JakartaSemiBold text-gray-900">
             {displayName}
           </Text>
-          <View className="flex-row items-center gap-2 mt-1">
-            <Text className="text-sm text-gray-500 capitalize">
-              {roleLabel}
+          {item.global_role && (
+            <Text className={`text-sm capitalize mt-1 ${
+              roleColors[item.global_role] || 'text-gray-500'
+            }`}>
+              {item.global_role}
             </Text>
-            {item.phone && (
-              <>
-                <Text className="text-gray-400">•</Text>
-                <Text className="text-sm text-gray-500">
-                  {item.phone}
-                </Text>
-              </>
-            )}
-          </View>
+          )}
         </View>
 
-        {/* Chat Button */}
-        <TouchableOpacity
-          onPress={() => handleStartChat(item)}
-          disabled={isStartingChat}
-          className="bg-primary-500 px-4 py-2 rounded-xl flex-row items-center"
-          activeOpacity={0.8}
-        >
-          {isStartingChat ? (
-            <ActivityIndicator size="small" color="white" />
-          ) : (
-            <>
-              <Image
-                source={icons.chat}
-                className="w-4 h-4 mr-2"
-                style={{ tintColor: 'white' }}
-              />
-              <Text className="text-white font-JakartaSemiBold">Chat</Text>
-            </>
-          )}
-        </TouchableOpacity>
+        {/* Arrow */}
+        <Image
+          source={icons.arrowRight}
+          className="w-5 h-5"
+          style={{ tintColor: '#D1D5DB', transform: [{ rotate: '180deg' }] }}
+        />
       </TouchableOpacity>
     );
   };
 
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-white">
+      <SafeAreaView className="flex-1 bg-gray-50">
         <View className="flex-1 justify-center items-center">
           <ActivityIndicator size="large" color="#A89BB5" />
         </View>
@@ -228,13 +151,48 @@ export default function DirectoryScreen() {
     );
   }
 
-  const showGuestMessage = userRole === 'guest';
+  if (userRole === 'guest') {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50">
+        <View className="bg-white px-4 py-3">
+          <View className="flex-row items-center">
+            <TouchableOpacity onPress={() => router.back()} className="mr-3">
+              <Image
+                source={icons.backArrow}
+                className="w-6 h-6"
+                style={{ tintColor: '#4B5563' }}
+              />
+            </TouchableOpacity>
+            <Text className="text-xl font-JakartaBold text-gray-900">
+              Directory
+            </Text>
+          </View>
+        </View>
+        
+        <View className="flex-1 justify-center items-center px-8">
+          <View className="w-20 h-20 bg-gray-100 rounded-full items-center justify-center mb-4">
+            <Image
+              source={icons.lock}
+              className="w-10 h-10"
+              style={{ tintColor: '#9CA3AF' }}
+            />
+          </View>
+          <Text className="text-xl font-JakartaSemiBold text-gray-900 text-center mb-2">
+            Members Only
+          </Text>
+          <Text className="text-gray-500 text-center">
+            The directory is available to church members. Please contact a leader for access.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
       {/* Header */}
-      <View className="bg-white border-b border-gray-100 px-4 py-3">
-        <View className="flex-row items-center">
+      <View className="bg-white">
+        <View className="px-4 py-3 flex-row items-center">
           <TouchableOpacity onPress={() => router.back()} className="mr-3">
             <Image
               source={icons.backArrow}
@@ -243,45 +201,57 @@ export default function DirectoryScreen() {
             />
           </TouchableOpacity>
           <Text className="text-xl font-JakartaBold text-gray-900">
-            Church Directory
+            Directory
           </Text>
+        </View>
+
+        {/* Search Bar */}
+        <View className="px-4 pb-3">
+          <View className="bg-gray-50 rounded-xl px-4 py-3 flex-row items-center">
+            <Image 
+              source={icons.search} 
+              className="w-5 h-5 mr-3" 
+              style={{ tintColor: '#9CA3AF' }} 
+            />
+            <TextInput
+              placeholder="Search members..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              className="flex-1 text-base font-Jakarta text-gray-900"
+              placeholderTextColor="#9CA3AF"
+            />
+          </View>
         </View>
       </View>
 
-      {error ? (
-        <View className="flex-1 justify-center items-center px-8">
-          <Text className="text-center text-base text-gray-600">
-            {error}
-          </Text>
-        </View>
-      ) : showGuestMessage ? (
-        <View className="flex-1 justify-center items-center px-8">
-          <Text className="text-xl font-JakartaSemiBold text-gray-900 text-center mb-2">
-            Members Only
-          </Text>
-          <Text className="text-gray-500 text-center">
-            The church directory is available to members. Please contact a leader if you need access.
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={profiles}
-          renderItem={renderProfile}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingBottom: 20 }}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={() => (
-            <View className="flex-1 justify-center items-center px-8 py-20">
-              <Text className="text-xl font-JakartaSemiBold text-gray-900 text-center mb-2">
-                No Members Found
-              </Text>
-              <Text className="text-gray-500 text-center">
-                The directory is currently empty
-              </Text>
-            </View>
-          )}
-        />
-      )}
+      {/* Member List */}
+      <FlatList
+        data={filteredProfiles}
+        renderItem={renderProfile}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={{ paddingBottom: 20 }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadProfiles(true)}
+            colors={['#A89BB5']}
+          />
+        }
+        ItemSeparatorComponent={() => <View className="h-px bg-gray-100 ml-[86px]" />}
+        ListEmptyComponent={() => (
+          <View className="flex-1 justify-center items-center px-8 py-20">
+            <Text className="text-xl font-JakartaSemiBold text-gray-900 text-center mb-2">
+              {searchQuery ? 'No Results' : 'No Members'}
+            </Text>
+            <Text className="text-gray-500 text-center">
+              {searchQuery 
+                ? `No members found for "${searchQuery}"`
+                : 'The directory is empty'}
+            </Text>
+          </View>
+        )}
+      />
     </SafeAreaView>
   );
 }

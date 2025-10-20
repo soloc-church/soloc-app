@@ -16,12 +16,10 @@ export const can = {
     ),
   
   assignInScope: (a: Authz | null, scopeType: 'ministry'|'team'|'group_chat', scopeId: string) => {
-    // Check if user has global role assignment capability
     if (a?.caps?.includes('role_assign_scoped')) {
       return true;
     }
     
-    // Check if user has contextual management capability for this specific scope
     const needed =
       scopeType === 'ministry' ? 'ministry_manage' :
       scopeType === 'team'     ? 'team_manage'     :
@@ -37,7 +35,7 @@ export const can = {
     );
   },
   
-  // Additional helpers for common checks
+  // Additional helpers
   isElder: (a: Authz | null) => 
     a?.globalRole === 'elder' || a?.globalRole === 'pastor' || a?.globalRole === 'admin',
   
@@ -55,10 +53,8 @@ export const can = {
     !!a?.caps?.includes('audit_read'),
   
   canManageMinistry: (a: Authz | null, ministryId?: string) => {
-    // Global capability
     if (a?.caps?.includes('ministry_manage')) return true;
     
-    // Contextual capability for specific ministry
     if (ministryId) {
       return !!a?.contexts?.some(c =>
         c.scopeType === 'ministry' &&
@@ -70,7 +66,12 @@ export const can = {
     return false;
   },
   
-  canManageGroupChat: (a: Authz | null, groupId?: string) => {
+  canCreateGroup: (a: Authz | null) => {
+    // Elders and above can create groups
+    return a?.globalRole === 'elder' || a?.globalRole === 'pastor' || a?.globalRole === 'admin';
+  },
+  
+  canManageGroup: (a: Authz | null, groupId?: string) => {
     // Global capability
     if (a?.caps?.includes('group_manage')) return true;
     

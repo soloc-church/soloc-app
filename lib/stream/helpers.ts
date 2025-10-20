@@ -11,19 +11,25 @@ export async function openDMChannel(
   otherUserId: string
 ): Promise<Channel> {
   // Get the result object from the API
+  //DEBUG
+  console.log('[DEBUG][stream/helpers] openDMChannel start', {
+    otherUserId,
+  });
   const result = await api.dm(otherUserId);
   
   if (!result.ok) {
     throw new Error(result.error.message || 'Failed to create DM channel');
   }
 
-  // DEBUG
-  console.log('client.userID', client.userID);  
-  console.log('openDMChannel raw result:', result);
-  console.log('openDMChannel data:', result?.data);
-
   const { data } = result;
   const [type, id] = data.cid.split(':');
+  //DEBUG
+  console.log('[DEBUG][stream/helpers] openDMChannel cid parsed', {
+    cid: data.cid,
+    type,
+    id,
+    idLength: id?.length,
+  });
   const channel = client.channel(type, id);
   await channel.watch();
   
@@ -38,6 +44,10 @@ export async function ensureGroupChannel(
   api: StreamApi,
   groupChatId: string
 ): Promise<Channel> {
+  //DEBUG
+  console.log('[DEBUG][stream/helpers] ensureGroupChannel start', {
+    groupChatId,
+  });
   const result = await api.ensureGroup(groupChatId);
   
   if (!result.ok) {
@@ -46,6 +56,13 @@ export async function ensureGroupChannel(
 
   const { data } = result;
   const [type, id] = data.cid.split(':');
+  //DEBUG
+  console.log('[DEBUG][stream/helpers] ensureGroupChannel cid parsed', {
+    cid: data.cid,
+    type,
+    id,
+    idLength: id?.length,
+  });
   const channel = client.channel(type, id);
   await channel.watch();
   
@@ -88,6 +105,10 @@ export async function joinGroup(
   api: StreamApi,
   groupChatId: string
 ): Promise<void> {
+  //DEBUG
+  console.log('[DEBUG][stream/helpers] joinGroup start', {
+    groupChatId,
+  });
   const result = await api.joinGroup(groupChatId);
   
   if (!result.ok) {
@@ -96,6 +117,10 @@ export async function joinGroup(
   
   // After joining, ensure the channel is watched
   await ensureGroupChannel(client, api, groupChatId);
+  //DEBUG
+  console.log('[DEBUG][stream/helpers] joinGroup end', {
+    groupChatId,
+  });
 }
 
 /**

@@ -122,7 +122,7 @@ const Layout = () => {
           }}
         />
         <Tabs.Screen
-          name="groups/index"
+          name="groups"
           options={{
             title: "Groups",
             headerShown: true,

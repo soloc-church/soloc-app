@@ -9,7 +9,6 @@ import {
   Image,
   ActivityIndicator,
   RefreshControl,
-  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -19,6 +18,8 @@ import { useAuthz } from '@/hooks/useAuthz';
 import { can } from '@/lib/rbac/permissions';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useStreamClient } from '@/providers/StreamProvider';
+import { createStreamApi } from '@/lib/stream/api';
+import { joinGroup } from '@/lib/stream/helpers';
 
 interface GroupChat {
   id: string;
@@ -26,13 +27,11 @@ interface GroupChat {
   description: string | null;
   visibility: 'public' | 'members' | 'private';
   memberCount: number;
-  gatheringDays: string[] | null;
   ministryName: string | null;
   teamName: string | null;
   isMember: boolean;
-  hasSubteams: boolean;
   streamChannelId: string | null;
-  lastActivity?: string;
+  createdBy: string | null;
 }
 
 export default function GroupsScreen() {
@@ -43,7 +42,20 @@ export default function GroupsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'joined' | 'public'>('all');
-  const canCreateGroup = can.manageGroupChat(authz);
+  const canCreateGroup = can.canCreateGroup(authz);
+
+  const streamApi = React.useMemo(() => {
+    const apiBase = process.env.EXPO_PUBLIC_API_URL;
+    if (!apiBase) return null;
+
+    return createStreamApi({
+      apiBase,
+      getAuthHeader: async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        return `Bearer ${session?.access_token || ''}`;
+      },
+    });
+  }, []);
 
   useEffect(() => {
     loadGroups();
@@ -54,7 +66,11 @@ export default function GroupsScreen() {
     else setLoading(true);
 
     try {
-      // Get groups based on filter
+      //DEBUG
+      console.log('[DEBUG][groups/index] loadGroups start', {
+        isRefreshing,
+        activeFilter,
+      });
       let query = supabase
         .from('group_chats')
         .select(`
@@ -62,13 +78,14 @@ export default function GroupsScreen() {
           name,
           description,
           visibility,
-          gathering_days,
           stream_channel_id,
+          created_by,
           ministries!group_chats_ministry_id_fkey(name),
           teams!group_chats_team_id_fkey(name),
-          group_chat_members!left(user_id)
+          group_memberships!group_memberships_group_chat_id_fkey(user_id)
         `)
-        .is('deleted_at', null)
+        //.is('deleted_at', null)
+        .eq('is_active', true)
         .order('created_at', { ascending: false });
 
       if (activeFilter === 'public') {
@@ -76,17 +93,25 @@ export default function GroupsScreen() {
       }
 
       const { data: groups, error } = await query;
-
       if (error) throw error;
 
-      // Get current user
       const { data: { user } } = await supabase.auth.getUser();
+      //DEBUG
+      console.log('[DEBUG][groups/index] supabase query result', {
+        fetchedGroups: groups?.length ?? 0,
+        userId: user?.id,
+      });
       
       const formattedGroups: GroupChat[] = (groups || []).map(group => {
-        const members = group.group_chat_members || [];
+        const members = group.group_memberships || [];
+        //DEBUG
+        console.log('[DEBUG][groups/index] group row', {
+          groupId: group.id,
+          memberCount: members.length,
+          streamChannelId: group.stream_channel_id,
+        });
         const isMember = members.some((m: any) => m.user_id === user?.id);
         
-        // Filter for 'joined' tab
         if (activeFilter === 'joined' && !isMember) {
           return null;
         }
@@ -97,12 +122,11 @@ export default function GroupsScreen() {
           description: group.description,
           visibility: group.visibility,
           memberCount: members.length,
-          gatheringDays: group.gathering_days,
           ministryName: group.ministries?.name,
-          teamName: group.teams?.name,
+          teamName: group.name,
           isMember,
-          hasSubteams: false, // You can add logic for this
           streamChannelId: group.stream_channel_id,
+          createdBy: group.created_by,
         };
       }).filter(Boolean) as GroupChat[];
 
@@ -110,39 +134,33 @@ export default function GroupsScreen() {
     } catch (error) {
       console.error('Error loading groups:', error);
     } finally {
+      //DEBUG
+      console.log('[DEBUG][groups/index] loadGroups end');
       setLoading(false);
       setRefreshing(false);
     }
   };
 
   const handleJoinGroup = async (group: GroupChat) => {
-    if (!isConnected) {
+    if (!isConnected || !streamApi) {
       alert('Please wait for chat to connect');
       return;
     }
 
     try {
-      // Join via Stream API
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/stream-channels/join-group`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ groupChatId: group.id }),
+      //DEBUG
+      console.log('[DEBUG][groups/index] handleJoinGroup pre', {
+        groupId: group.id,
+        streamChannelIdOnRecord: group.streamChannelId,
+        isConnected,
+        hasApi: !!streamApi,
       });
-
-      if (!response.ok) throw new Error('Failed to join group');
-
-      // Add to local state
-      const { data: { user } } = await supabase.auth.getUser();
-      await supabase
-        .from('group_chat_members')
-        .insert({ group_chat_id: group.id, user_id: user?.id });
-
-      // Refresh groups
+      await joinGroup(client, streamApi, group.id);
+      //DEBUG
+      console.log('[DEBUG][groups/index] handleJoinGroup post', {
+        groupId: group.id,
+      });
       await loadGroups();
-      
       alert(`Successfully joined ${group.name}!`);
     } catch (error) {
       console.error('Error joining group:', error);
@@ -150,53 +168,23 @@ export default function GroupsScreen() {
     }
   };
 
-  const handleLeaveGroup = async (group: GroupChat) => {
-    if (!isConnected) {
-      alert('Please wait for chat to connect');
-      return;
-    }
-
-    try {
-      // Leave via Stream API
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/stream-channels/leave-group`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ groupChatId: group.id }),
+  const handleGroupPress = (group: GroupChat) => {
+    if (group.isMember) {
+      // Navigate directly to chat
+      router.push({
+        pathname: '/(root)/chat/channel',
+        params: {
+          channelId: group.id,
+          channelType: 'team',
+          channelName: group.name
+        }
       });
-
-      if (!response.ok) throw new Error('Failed to leave group');
-
-      // Remove from database
-      const { data: { user } } = await supabase.auth.getUser();
-      await supabase
-        .from('group_chat_members')
-        .delete()
-        .eq('group_chat_id', group.id)
-        .eq('user_id', user?.id);
-
-      // Refresh groups
-      await loadGroups();
-      
-      alert(`Left ${group.name}`);
-    } catch (error) {
-      console.error('Error leaving group:', error);
-      alert('Failed to leave group');
-    }
-  };
-
-  const getVisibilityStyle = (visibility: string) => {
-    switch (visibility) {
-      case 'public':
-        return { bg: 'bg-green-50', text: 'text-green-600', icon: '🌍' };
-      case 'members':
-        return { bg: 'bg-blue-50', text: 'text-blue-600', icon: '👥' };
-      case 'private':
-        return { bg: 'bg-purple-50', text: 'text-purple-600', icon: '🔒' };
-      default:
-        return { bg: 'bg-gray-50', text: 'text-gray-600', icon: '?' };
+    } else {
+      // Show group details for non-members
+      router.push({
+        pathname: '/(root)/(tabs)/groups/[id]',
+        params: { id: group.id }
+      });
     }
   };
 
@@ -206,84 +194,104 @@ export default function GroupsScreen() {
   );
 
   const renderGroup = ({ item }: { item: GroupChat }) => {
-    const visibilityStyle = getVisibilityStyle(item.visibility);
+    const visibilityColors = {
+      public: { bg: '#10B98120', text: '#10B981', label: 'Public' },
+      members: { bg: '#3B82F620', text: '#3B82F6', label: 'Members' },
+      private: { bg: '#8B5CF620', text: '#8B5CF6', label: 'Private' }
+    };
+
+    const visibility = visibilityColors[item.visibility];
 
     return (
       <TouchableOpacity
+        onPress={() => handleGroupPress(item)}
         className="mx-4 mb-3"
         activeOpacity={0.9}
       >
-        <LinearGradient
-          colors={['#FFFFFF', '#FAFAFA']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          className="rounded-2xl p-4 border border-gray-100"
-        >
-          {/* Header */}
-          <View className="flex-row items-start justify-between mb-3">
-            <View className="flex-1">
-              <Text className="text-lg font-JakartaBold text-gray-900" numberOfLines={1}>
-                {item.name}
-              </Text>
-              
-              {/* Tags */}
-              <View className="flex-row items-center gap-2 mt-2 flex-wrap">
-                {/* Visibility Badge */}
-                <View className={`px-2 py-1 rounded-full ${visibilityStyle.bg} flex-row items-center`}>
-                  <Text className="text-xs mr-1">{visibilityStyle.icon}</Text>
-                  <Text className={`text-xs font-JakartaMedium capitalize ${visibilityStyle.text}`}>
-                    {item.visibility}
+        <View className="bg-white rounded-2xl overflow-hidden shadow-sm">
+          {/* Gradient Header */}
+          <LinearGradient
+            colors={['#A89BB5', '#8B7F97']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            className="px-4 pt-4 pb-3"
+          >
+            <View className="flex-row justify-between items-start">
+              <View className="flex-1 mr-3">
+                <Text className="text-white text-lg font-JakartaBold" numberOfLines={1}>
+                  {item.name}
+                </Text>
+                {item.ministryName || item.teamName ? (
+                  <Text className="text-white/80 text-sm mt-1">
+                    {item.ministryName || item.teamName}
                   </Text>
-                </View>
-                
-                {/* Ministry/Team Badge */}
-                {(item.ministryName || item.teamName) && (
-                  <View className="px-2 py-1 rounded-full bg-gray-100">
-                    <Text className="text-xs font-JakartaMedium text-gray-600">
-                      {item.ministryName || item.teamName}
-                    </Text>
-                  </View>
-                )}
+                ) : null}
+              </View>
+              <View className="bg-white/20 px-3 py-1.5 rounded-full">
+                <Text className="text-white text-sm font-JakartaSemiBold">
+                  {item.memberCount} {item.memberCount === 1 ? 'member' : 'members'}
+                </Text>
               </View>
             </View>
+          </LinearGradient>
 
-            {/* Member Count */}
-            <View className="bg-gray-50 rounded-xl px-3 py-2 ml-3">
-              <Text className="text-xs text-gray-500 text-center">Members</Text>
-              <Text className="text-lg font-JakartaBold text-gray-900 text-center">
-                {item.memberCount}
+          {/* Content */}
+          <View className="px-4 py-3">
+            {item.description ? (
+              <Text className="text-gray-600 text-sm mb-3" numberOfLines={2}>
+                {item.description}
               </Text>
+            ) : (
+              <Text className="text-gray-400 text-sm italic mb-3">
+                No description available
+              </Text>
+            )}
+
+            {/* Footer */}
+            <View className="flex-row items-center justify-between">
+              <View 
+                className="px-3 py-1 rounded-full"
+                style={{ backgroundColor: visibility.bg }}
+              >
+                <Text 
+                  className="text-xs font-JakartaSemiBold"
+                  style={{ color: visibility.text }}
+                >
+                  {visibility.label}
+                </Text>
+              </View>
+
+              {item.isMember ? (
+                <View className="flex-row items-center">
+                  <View className="bg-green-100 px-3 py-1 rounded-full">
+                    <Text className="text-green-600 text-xs font-JakartaSemiBold">
+                      Joined
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleJoinGroup(item);
+                  }}
+                  className="bg-primary-500 px-4 py-1.5 rounded-full"
+                >
+                  <Text className="text-white text-xs font-JakartaSemiBold">
+                    Join
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
-
-          {/* Description */}
-          {item.description && (
-            <Text className="text-sm text-gray-600 mb-3" numberOfLines={2}>
-              {item.description}
-            </Text>
-          )}
-
-          {/* Action Button */}
-          <TouchableOpacity
-            onPress={() => item.isMember ? handleLeaveGroup(item) : handleJoinGroup(item)}
-            className={`py-2 px-4 rounded-xl ${
-              item.isMember ? 'bg-gray-100' : 'bg-primary-500'
-            }`}
-          >
-            <Text className={`text-center font-JakartaSemiBold ${
-              item.isMember ? 'text-gray-600' : 'text-white'
-            }`}>
-              {item.isMember ? 'Leave Group' : 'Join Group'}
-            </Text>
-          </TouchableOpacity>
-        </LinearGradient>
+        </View>
       </TouchableOpacity>
     );
   };
 
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-white">
+      <SafeAreaView className="flex-1 bg-gray-50">
         <View className="flex-1 justify-center items-center">
           <ActivityIndicator size="large" color="#A89BB5" />
         </View>
@@ -293,10 +301,9 @@ export default function GroupsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['bottom']}>
-      {/* Search and Filters */}
-      <View className="bg-white border-b border-gray-100 px-4 pb-3">
-        {/* Search Bar */}
-        <View className="bg-gray-50 rounded-xl px-4 py-3 flex-row items-center mb-3">
+      {/* Search Bar */}
+      <View className="bg-white px-4 py-3 border-b border-gray-100">
+        <View className="bg-gray-50 rounded-xl px-4 py-3 flex-row items-center">
           <Image 
             source={icons.search} 
             className="w-5 h-5 mr-3" 
@@ -308,12 +315,12 @@ export default function GroupsScreen() {
             onChangeText={setSearchQuery}
             className="flex-1 text-base font-Jakarta text-gray-900"
             placeholderTextColor="#9CA3AF"
-            autoCorrect={false}
-            autoCapitalize="none"
           />
         </View>
+      </View>
 
-        {/* Filter Tabs */}
+      {/* Filter Tabs */}
+      <View className="bg-white px-4 py-3 border-b border-gray-100">
         <View className="flex-row gap-2">
           {(['all', 'joined', 'public'] as const).map((filter) => (
             <TouchableOpacity
@@ -326,7 +333,7 @@ export default function GroupsScreen() {
               <Text className={`text-center font-JakartaSemiBold capitalize ${
                 activeFilter === filter ? 'text-white' : 'text-gray-600'
               }`}>
-                {filter === 'all' ? 'All Groups' : filter === 'joined' ? 'My Groups' : 'Public'}
+                {filter === 'all' ? 'All' : filter === 'joined' ? 'My Groups' : 'Public'}
               </Text>
             </TouchableOpacity>
           ))}
@@ -352,6 +359,11 @@ export default function GroupsScreen() {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={() => (
           <View className="flex-1 justify-center items-center px-8 py-20">
+            <Image 
+              source={icons.chat} 
+              className="w-20 h-20 mb-4" 
+              style={{ tintColor: '#D1D5DB' }}
+            />
             <Text className="text-xl font-JakartaSemiBold text-gray-900 text-center mb-2">
               No Groups Found
             </Text>
@@ -366,11 +378,11 @@ export default function GroupsScreen() {
         )}
       />
 
-      {/* Create Group FAB */}
+      {/* Create Group FAB - Only for elders+ */}
       {canCreateGroup && (
         <TouchableOpacity
           onPress={() => router.push('/(root)/(tabs)/groups/create')}
-          className="absolute bottom-24 right-4 w-14 h-14 bg-primary-500 rounded-full items-center justify-center shadow-lg"
+          className="absolute bottom-24 right-4 w-14 h-14 bg-primary-500 rounded-full items-center justify-center"
           style={{
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 4 },

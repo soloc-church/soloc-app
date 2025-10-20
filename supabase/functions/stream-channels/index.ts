@@ -50,6 +50,11 @@ async function initializeClients(req: Request) {
     Deno.env.get('STREAM_API_SECRET')!
   );
 
+  //DEBUG
+  console.log('[DEBUG][stream-functions] initializeClients', {
+    userId: user.id,
+  });
+
   return { supabase, stream, userId: user.id };
 }
 
@@ -69,6 +74,12 @@ async function ensureGroupChannel(
     throw jsonResponse({ error: 'Group not found' }, 404);
   }
 
+  //DEBUG
+  console.log('[DEBUG][stream-functions] ensureGroupChannel fetched group', {
+    groupId: group.id,
+    streamChannelId: group.stream_channel_id,
+  });
+
   const channel = stream.channel('team', group.id, {
     name: group.name,
     description: group.description,
@@ -80,9 +91,20 @@ async function ensureGroupChannel(
     await channel.create();
   } catch (err) {
     // Channel already exists, which is fine
+    //DEBUG
+    console.log('[DEBUG][stream-functions] ensureGroupChannel create skipped', {
+      groupId: group.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   const cid = channel.cid ?? `${channel.type}:${group.id}`;
+  //DEBUG
+  console.log('[DEBUG][stream-functions] ensureGroupChannel channel ids', {
+    cid,
+    channelId: channel.id,
+    idLength: channel.id?.length,
+  });
 
   // Update DB with channel ID if not set
   if (!group.stream_channel_id) {
@@ -93,6 +115,19 @@ async function ensureGroupChannel(
   }
 
   return { channel, group, cid };
+}
+
+async function generateDmChannelId(members: string[]): Promise<string> {
+  // Deterministic hash keeps ID stable but under Stream's 64 char limit
+  const encoder = new TextEncoder();
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    encoder.encode(members.join(':'))
+  );
+  const hashHex = Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+  return `dm_${hashHex.slice(0, 40)}`;
 }
 
 Deno.serve(async (req) => {
@@ -116,9 +151,15 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: 'otherUserId required' }, 400);
       }
 
+      //DEBUG
+      console.log('[DEBUG][stream-functions] dm request', {
+        userId,
+        otherUserId,
+      });
+
       // Create deterministic DM channel ID
       const members = [userId, otherUserId].sort();
-      const dmId = `dm_${members[0]}_${members[1]}`;
+      const dmId = await generateDmChannelId(members);
       
       const channel = stream.channel('messaging', dmId, {
         members,
@@ -128,9 +169,19 @@ Deno.serve(async (req) => {
         await channel.create();
       } catch {
         // Channel already exists
+        //DEBUG
+        console.log('[DEBUG][stream-functions] dm channel exists', {
+          dmId,
+        });
       }
 
       const cid = channel.cid ?? `${channel.type}:${dmId}`;
+      //DEBUG
+      console.log('[DEBUG][stream-functions] dm channel ids', {
+        cid,
+        channelId: channel.id,
+        idLength: channel.id?.length,
+      });
 
       // Store in database
       await supabase
@@ -155,6 +206,14 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: 'name and visibility are required' }, 400);
       }
 
+      //DEBUG
+      console.log('[DEBUG][stream-functions] create-group request', {
+        userId,
+        name,
+        visibility,
+        memberIdsLength: memberIds?.length ?? 0,
+      });
+
       // Create group in database
       const { data: group, error: createError } = await supabase
         .from('group_chats')
@@ -171,6 +230,11 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: 'Failed to create group' }, 500);
       }
 
+      //DEBUG
+      console.log('[DEBUG][stream-functions] create-group db record', {
+        groupId: group.id,
+      });
+
       // Create Stream channel
       const channel = stream.channel('team', group.id, {
         name,
@@ -183,6 +247,13 @@ Deno.serve(async (req) => {
       const allMembers = [...(memberIds || []), userId];
       await channel.create();
       await channel.addMembers(allMembers);
+
+      //DEBUG
+      console.log('[DEBUG][stream-functions] create-group channel ids', {
+        cid: channel.cid,
+        channelId: channel.id,
+        idLength: channel.id?.length,
+      });
 
       const cid = channel.cid ?? `${channel.type}:${group.id}`;
 
@@ -202,6 +273,12 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: 'groupChatId required' }, 400);
       }
 
+      //DEBUG
+      console.log('[DEBUG][stream-functions] ensure-group request', {
+        userId,
+        groupChatId,
+      });
+
       const { cid } = await ensureGroupChannel(supabase, stream, groupChatId);
       return jsonResponse({ cid });
     }
@@ -213,8 +290,20 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: 'groupChatId required' }, 400);
       }
 
+      //DEBUG
+      console.log('[DEBUG][stream-functions] join-group request', {
+        userId,
+        groupChatId,
+      });
+
       const { channel } = await ensureGroupChannel(supabase, stream, groupChatId);
       await channel.addMembers([userId]);
+      //DEBUG
+      console.log('[DEBUG][stream-functions] join-group channel ids', {
+        cid: channel.cid,
+        channelId: channel.id,
+        idLength: channel.id?.length,
+      });
       
       return jsonResponse({ ok: true });
     }
@@ -226,8 +315,20 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: 'groupChatId required' }, 400);
       }
 
+      //DEBUG
+      console.log('[DEBUG][stream-functions] leave-group request', {
+        userId,
+        groupChatId,
+      });
+
       const { channel } = await ensureGroupChannel(supabase, stream, groupChatId);
       await channel.removeMembers([userId]);
+      //DEBUG
+      console.log('[DEBUG][stream-functions] leave-group channel ids', {
+        cid: channel.cid,
+        channelId: channel.id,
+        idLength: channel.id?.length,
+      });
       
       return jsonResponse({ ok: true });
     }
@@ -332,7 +433,19 @@ Deno.serve(async (req) => {
       }
 
       const { channel } = await ensureGroupChannel(supabase, stream, groupChatId);
+      //DEBUG
+      console.log('[DEBUG][stream-functions] add-members request', {
+        userId,
+        groupChatId,
+        memberIdsLength: memberIds.length,
+      });
       await channel.addMembers(memberIds);
+      //DEBUG
+      console.log('[DEBUG][stream-functions] add-members channel ids', {
+        cid: channel.cid,
+        channelId: channel.id,
+        idLength: channel.id?.length,
+      });
       
       return jsonResponse({ ok: true });
     }
@@ -345,7 +458,19 @@ Deno.serve(async (req) => {
       }
 
       const { channel } = await ensureGroupChannel(supabase, stream, groupChatId);
+      //DEBUG
+      console.log('[DEBUG][stream-functions] remove-members request', {
+        userId,
+        groupChatId,
+        memberIdsLength: memberIds.length,
+      });
       await channel.removeMembers(memberIds);
+      //DEBUG
+      console.log('[DEBUG][stream-functions] remove-members channel ids', {
+        cid: channel.cid,
+        channelId: channel.id,
+        idLength: channel.id?.length,
+      });
       
       return jsonResponse({ ok: true });
     }
